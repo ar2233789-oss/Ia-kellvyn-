@@ -163,7 +163,7 @@ public final class ReferenceActivity extends Activity {
                 "close.click();" +
                 "const closed=await waitFor(()=>!Array.from(document.querySelectorAll('h2')).some(h=>h.innerText.trim().toUpperCase()==='CONFIGURAÇÕES DO KELLVYN'));" +
                 "if(!closed){report(false,'settings panel did not close after enabling lightning');return 'effects-panel-stuck';}" +
-                "await new Promise(resolve=>setTimeout(r=>r(),1200));" +
+                "await new Promise(resolve=>setTimeout(resolve,1200));" +
                 "}" +
                 "done();return state+'-ready';" +
                 "}" +
