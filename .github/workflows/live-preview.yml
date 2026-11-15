@@ -307,7 +307,7 @@ jobs:
           )"
           if [ -n "$PR_NUMBER" ]; then
             COMMENT_BODY="$(python -c 'import json,sys; print(json.dumps({"body":"**Kellvyn Studio ao vivo — WebView × Android nativo**\n\n"+sys.argv[1]+"\n\nAcesso temporário enquanto a execução do laboratório permanecer ativa."}))' "$LIVE_URL")"
-            if             curl -fsS --retry 3 -X POST \
+            if curl -fsS --retry 3 -X POST \
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -318,7 +318,6 @@ jobs:
             else
               echo "WARNING: Could not publish preview URL as a PR comment; URL remains in the workflow summary."
             fi
-            echo "LIVE_PREVIEW_LINK_PUBLISHED_TO_PR=$PR_NUMBER"
           else
             echo "No PR number in this event; use the live URL in the workflow summary."
           fi
