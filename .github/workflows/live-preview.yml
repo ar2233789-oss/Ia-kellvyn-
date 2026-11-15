@@ -5,7 +5,9 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/live-preview.yml'
+      - 'studio/index.html'
       - 'scripts/live_preview_server.py'
+      - 'scripts/capture_poco_f6_pair.py'
       - 'scripts/test_live_preview_server.py'
   pull_request:
     branches: [main]
@@ -28,8 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
-      - name: Checkout the isolated lab
+      - name: Checkout the tested native candidate and Studio
         uses: actions/checkout@v4
+        with:
+          ref: poco-f6-live-animation
 
       - name: Configure Java and Gradle
         uses: actions/setup-java@v4
@@ -45,6 +49,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - uses: oven-sh/setup-bun@v2
 
       - name: Install Android, image and tunnel tools
         shell: bash
@@ -238,18 +244,19 @@ jobs:
           echo "Both app versions are active on separate identical Poco F6 virtual profiles."
 
       - name: Start the Studio screen feeds and open the temporary secure tunnel
+        id: live
         shell: bash
-        timeout-minutes: 10
+        timeout-minutes: 5
         run: |
           set -euo pipefail
           TOKEN="$(openssl rand -hex 24)"
-          python scripts/live_preview_server.py \
+          nohup python scripts/live_preview_server.py \
             --studio studio/index.html \
             --webview-device emulator-5556 \
             --native-device emulator-5554 \
             --token "$TOKEN" \
             --port 8787 \
-            --interval 1.0 > /tmp/kellvyn-live-server.log 2>&1 &
+            --interval 0.7 > /tmp/kellvyn-live-server.log 2>&1 </dev/null &
           SERVER_PID=$!
           echo "$SERVER_PID" > /tmp/kellvyn-live-server.pid
           READY=0
@@ -267,8 +274,8 @@ jobs:
             cat /tmp/kellvyn-live-health.json 2>/dev/null || true
             exit 1
           fi
-          /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8787 --protocol http2 \
-            > /tmp/kellvyn-cloudflared.log 2>&1 &
+          nohup /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8787 --protocol http2 \
+            > /tmp/kellvyn-cloudflared.log 2>&1 </dev/null &
           TUNNEL_PID=$!
           echo "$TUNNEL_PID" > /tmp/kellvyn-cloudflared.pid
           TUNNEL_URL=""
@@ -282,31 +289,53 @@ jobs:
             sleep 2
           done
           if [ -z "$TUNNEL_URL" ]; then cat /tmp/kellvyn-cloudflared.log; exit 1; fi
-          PUBLIC_READY=0
-          for attempt in $(seq 1 30); do
-            if curl -fsS "$TUNNEL_URL/$TOKEN/health" -o /tmp/kellvyn-public-health.json; then
-              PUBLIC_READY=1
-              break
-            fi
-            sleep 2
-          done
-          if [ "$PUBLIC_READY" != "1" ]; then
-            echo "The temporary tunnel did not become reachable."
-            cat /tmp/kellvyn-cloudflared.log
-            exit 1
-          fi
           LIVE_URL="$TUNNEL_URL/$TOKEN/"
+          echo "url=$LIVE_URL" >> "$GITHUB_OUTPUT"
+          echo "server_pid=$SERVER_PID" >> "$GITHUB_OUTPUT"
+          echo "tunnel_pid=$TUNNEL_PID" >> "$GITHUB_OUTPUT"
           echo "LIVE_PREVIEW_URL=$LIVE_URL"
           echo "## Kellvyn Studio — transmissão ao vivo" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "[$LIVE_URL]($LIVE_URL)" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "WebView e APK Android nativo ativos ao mesmo tempo em dois AVDs Android 15 com perfil Poco F6." >> "$GITHUB_STEP_SUMMARY"
-          echo "A transmissão termina quando esta execução do Actions for encerrada." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publicar o link direto do Studio no PR
+        uses: actions/github-script@v7
+        env:
+          LIVE_URL: ${{ steps.live.outputs.url }}
+        with:
+          script: |
+            const body = [
+              "**Kellvyn Studio — monitor ao vivo**",
+              "",
+              process.env.LIVE_URL,
+              "",
+              "WebView original à esquerda e APK Android nativo à direita, em dois AVDs com perfil Poco F6. Link temporário, disponível enquanto a execução do laboratório estiver ativa."
+            ].join("\\n");
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 3,
+              body
+            });
+            core.notice("Link do Studio publicado no PR #3.");
+
+      - name: Manter o monitor ao vivo aberto
+        shell: bash
+        timeout-minutes: 350
+        env:
+          SERVER_PID: ${{ steps.live.outputs.server_pid }}
+          TUNNEL_PID: ${{ steps.live.outputs.tunnel_pid }}
+        run: |
+          set -euo pipefail
+          test -n "$SERVER_PID" && test -n "$TUNNEL_PID"
+          kill -0 "$SERVER_PID"
+          kill -0 "$TUNNEL_PID"
           while kill -0 "$TUNNEL_PID" 2>/dev/null && kill -0 "$SERVER_PID" 2>/dev/null; do
             sleep 20
           done
-          echo "The live stream process ended."
+          echo "O servidor ou o túnel encerrou."
           exit 1
 
       - name: Stop live services and collect diagnostics
