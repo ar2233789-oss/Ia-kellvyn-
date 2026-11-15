@@ -220,23 +220,53 @@ def assert_ui_label_absent(label: str, timeout: int = 8) -> None:
     raise RuntimeError(f"UI label is still visible after closing panel: {label!r}")
 
 
+def parse_native_effects_preference(raw: str) -> list[str]:
+    """Read visual_effects from Android SharedPreferences XML.
+
+    Android stores string preferences as element text, not as a `value`
+    attribute. A previous verifier incorrectly read node.attrib["value"].
+    Older Android versions may also encode a string set as a nested <set>.
+    """
+    try:
+        root = ET.fromstring(raw)
+    except ET.ParseError as error:
+        raise RuntimeError("Native SharedPreferences XML is invalid.") from error
+
+    node = next(
+        (
+            item for item in root
+            if item.attrib.get("name") == "visual_effects"
+            and item.tag in {"string", "set"}
+        ),
+        None,
+    )
+    if node is None:
+        raise RuntimeError("Native visual_effects preference is missing.")
+
+    if node.tag == "set":
+        return [
+            (child.text or "").strip()
+            for child in node
+            if child.tag == "string" and (child.text or "").strip()
+        ]
+
+    try:
+        effects = json.loads((node.text or "").strip())
+    except json.JSONDecodeError as error:
+        raise RuntimeError("Native visual_effects preference does not contain valid JSON.") from error
+
+    if not isinstance(effects, list) or not all(isinstance(item, str) for item in effects):
+        raise RuntimeError("Native visual_effects preference must contain a JSON string array.")
+    return effects
+
+
 def verify_native_effects() -> dict:
     raw = adb(
         "shell", "run-as", APP_PACKAGE, "cat", "shared_prefs/kellvyn_native.xml",
         timeout=20,
     )
     (NATIVE / "native-prefs.xml").write_text(raw, encoding="utf-8")
-    root = ET.fromstring(raw)
-    node = next(
-        (item for item in root if item.tag == "string" and item.attrib.get("name") == "visual_effects"),
-        None,
-    )
-    if node is None:
-        raise RuntimeError("Native visual_effects preference missing after selecting lightning.")
-    try:
-        effects = json.loads(node.attrib["value"])
-    except (KeyError, json.JSONDecodeError) as error:
-        raise RuntimeError("Native visual_effects preference is not valid JSON.") from error
+    effects = parse_native_effects_preference(raw)
     if not {"chuva", "raios"}.issubset(set(effects)):
         raise RuntimeError(f"Rain and lightning are not both enabled: {effects}")
     return {"effects": effects, "passed": True}

@@ -9,6 +9,7 @@ on:
       - 'lab-reference-android/**'
       - 'scripts/prepare_poco_f6_virtual.sh'
       - 'scripts/capture_poco_f6_pair.py'
+      - 'scripts/test_capture_poco_f6_pair.py'
       - 'scripts/compare_screenshots.py'
       - '.github/workflows/visual-capture.yml'
   pull_request:
@@ -100,8 +101,10 @@ jobs:
           python-version: '3.12'
       - name: Install comparison tools
         run: python -m pip install --disable-pip-version-check numpy pillow
-      - name: Preflight capture harness syntax
-        run: python -m py_compile scripts/capture_poco_f6_pair.py
+      - name: Preflight capture harness and Android preference parser tests
+        run: |
+          python -m py_compile scripts/capture_poco_f6_pair.py
+          python -m unittest discover -s scripts -p 'test_capture_poco_f6_pair.py' -v
       - uses: oven-sh/setup-bun@v2
       - name: Build the web reference and start its local server
         shell: bash
