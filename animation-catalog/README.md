@@ -17,7 +17,7 @@ A implementação web é a referência visual. Os dados abaixo foram lidos do sn
 | Folhas — quantidade | round(área/22000), limite 160; cerca de 18 no viewport | 21 fixas (metade de particleCount) | Quantidade próxima no viewport, mas não proporcional à área |
 | Folhas — movimento | 30–75 px/s; deriva senoidal com amplitude 40 px e frequência 1,2 rad/s | 1–3,4 dp por frame ×1,15; deriva de cerca de 0,8 dp por frame | Movimento lateral do Android é menor e não usa a mesma fase/onda |
 | Folhas — rotação | -1,25 a +1,25 rad/s | -2,5 a +2,5 graus por frame de 45 ms | Ordem de grandeza próxima; unidade e cadência diferentes |
-| Raios — intervalo inicial | 2–6 s | 2–6 s na inicialização; 1,2 s ao ativar dinamicamente o efeito | O primeiro raio após ligar o efeito pode ocorrer cedo demais no Android |
+| Raios — intervalo inicial | 2–6 s | 2–6 s na inicialização e ao ativar dinamicamente o efeito (alinhado no patch mais recente) | Parâmetro temporal alinhado; validar a distribuição com vídeo |
 | Raios — intervalo seguinte | 3–9 s | 3–9 s | Faixa nominal igual |
 | Raios — descarga | inicia entre 15% e 85% da largura; termina em 45–75% da altura | mesma faixa de posição e comprimento | Geometria geral aproximada; o percurso aleatório ainda difere |
 | Raios — clarão | 12% de alfa máximo, decaimento 2,2/s | 12% de alfa máximo, decaimento 2,2/s | Parâmetro nominal alinhado após patch local |
