@@ -63,6 +63,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - name: Install the locked web dependencies
         run: cd snapshot && bun install --frozen-lockfile
+      - name: Type-check the complete web source
+        run: cd snapshot && bun ./node_modules/typescript/bin/tsc --noEmit
       - name: Run web behavior tests
         run: cd snapshot && bun run test
       - name: Build the web reference
