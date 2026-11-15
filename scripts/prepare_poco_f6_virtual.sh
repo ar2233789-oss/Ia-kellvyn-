@@ -2,13 +2,13 @@
 # Exact AVD profile used by the existing Poco F6 virtual laboratory.
 set -euo pipefail
 
-SDK_ROOT="\${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
 SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
 test -n "$SDKMANAGER"
 
 export ANDROID_HOME="$SDK_ROOT"
 export ANDROID_SDK_ROOT="$SDK_ROOT"
-export ANDROID_AVD_HOME="\${ANDROID_AVD_HOME:-$HOME/.android/avd}"
+export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
 mkdir -p "$ANDROID_AVD_HOME"
 export PATH="$SDK_ROOT/platform-tools:$SDK_ROOT/emulator:$PATH"
 
@@ -35,8 +35,8 @@ test -f "$AVD_CONFIG"
 
 set_avd_prop() {
   local key="$1" value="$2"
-  if grep -q "^\${key}=" "$AVD_CONFIG"; then
-    sed -i "s|^\${key}=.*|\${key}=\${value}|" "$AVD_CONFIG"
+  if grep -q "^${key}=" "$AVD_CONFIG"; then
+    sed -i "s|^${key}=.*|${key}=${value}|" "$AVD_CONFIG"
   else
     printf '%s=%s\n' "$key" "$value" >> "$AVD_CONFIG"
   fi
