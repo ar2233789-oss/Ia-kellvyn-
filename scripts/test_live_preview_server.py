@@ -1,3 +1,4 @@
+# Regression checks for the Studio's live dual-screen bridge.
 from __future__ import annotations
 
 import unittest
