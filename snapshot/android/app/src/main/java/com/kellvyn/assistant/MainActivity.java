@@ -1631,9 +1631,7 @@ public class MainActivity extends Activity {
         layout.setOrientation(LinearLayout.VERTICAL);
 
         TextView instructions = text(
-                "Configure os tokens pelo chat principal. Telegram: /bot telegram token SEU_TOKEN. " +
-                "Discord: /bot discord token SEU_TOKEN (ative Message Content Intent no portal do Discord). " +
-                "O cérebro local precisa estar preparado antes de ativar um bot. O WhatsApp exige webhook público e permanece indisponível neste APK.",
+                "Essa área serve para não deixar a tarefa morrer: mantenha seus bots ligados ou desligue quando quiser.",
                 12, uiMutedColor(), false);
         instructions.setLineSpacing(dp(3), 1f);
         instructions.setPadding(dp(12), dp(12), dp(12), dp(12));
@@ -1724,9 +1722,9 @@ public class MainActivity extends Activity {
             }
         }
 
-        BotRow telegram = new BotRow("telegram", "Telegram", true);
         BotRow discord = new BotRow("discord", "Discord", true);
         BotRow whatsapp = new BotRow("whatsapp", "WhatsApp", false);
+        BotRow telegram = new BotRow("telegram", "Telegram", true);
 
         android.app.Dialog dialog = showBottomSheetDialog(
                 "BOTS ATIVOS", "Mantenha os bots ativos ou desligue quando quiser", layout);
