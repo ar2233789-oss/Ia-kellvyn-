@@ -224,7 +224,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kellvyn-pocof6-webview-vs-native
-          path: artifacts/poco-f6/**
+          name: kellvyn-pocof6-parity-metrics
+          path: |
+            artifacts/poco-f6/summary.json
+            artifacts/poco-f6/poco-f6-capture-report.json
+            artifacts/poco-f6/poco-f6-environment.json
+            artifacts/poco-f6/comparison/**/comparison-report.json
           if-no-files-found: warn
           retention-days: 14
