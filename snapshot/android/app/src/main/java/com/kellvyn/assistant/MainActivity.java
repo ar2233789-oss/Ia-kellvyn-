@@ -2261,19 +2261,20 @@ public class MainActivity extends Activity {
         private final float[] x = new float[count], y = new float[count], speed = new float[count], len = new float[count], opacity = new float[count];
         private final float[] px = new float[particleCount], py = new float[particleCount];
         private final float[] pspeed = new float[particleCount], psize = new float[particleCount], prot = new float[particleCount], protSpeed = new float[particleCount];
-        private final float[] boltX = new float[14], boltY = new float[14];
+        private final float[] boltX = new float[32], boltY = new float[32];
         private int boltPointCount = 0;
         private Set<String> activeEffects = new HashSet<>();
         private boolean initialized = false, running = false;
         private float flashIntensity = 0f;
         private long nextLightningAt = 0L;
+        private long lastLightningFrameAt = 0L;
 
         RainView() {
             super(MainActivity.this);
             flashPaint.setColor(0x18DDE8FF);
             activeEffects = renderEffectSet();
             if (activeEffects.contains("raios")) {
-                nextLightningAt = System.currentTimeMillis() + 1200L;
+                nextLightningAt = System.currentTimeMillis() + 2000L + (long)(Math.random() * 4000L);
             }
         }
 
@@ -2284,9 +2285,11 @@ public class MainActivity extends Activity {
             if (hasLightning && (!hadLightning || nextLightningAt == 0L)) {
                 nextLightningAt = System.currentTimeMillis() + 1200L;
                 flashIntensity = 0f;
+                lastLightningFrameAt = 0L;
             } else if (!hasLightning) {
                 nextLightningAt = 0L;
                 flashIntensity = 0f;
+                lastLightningFrameAt = 0L;
             }
             invalidate();
         }
@@ -2373,39 +2376,44 @@ public class MainActivity extends Activity {
         private void drawLightning(Canvas c) {
             long now = System.currentTimeMillis();
             if (flashIntensity <= 0f && now >= nextLightningAt) {
-                // One clean, short bolt with restrained bends: it should read as lightning,
-                // not a dense zigzag or a branching graphic covering the whole screen.
-                float endY = getHeight() * (0.40f + (float)Math.random() * 0.12f);
-                boltPointCount = boltX.length;
-                float bx = getWidth() * (0.24f + (float)Math.random() * 0.52f);
+                // Keep the same timing envelope and geometry as the web canvas implementation.
+                float endY = getHeight() * (0.45f + (float)Math.random() * 0.30f);
+                float bx = getWidth() * (0.15f + (float)Math.random() * 0.70f);
                 float by = 0f;
-                float minX = getWidth() * 0.12f;
-                float maxX = getWidth() * 0.88f;
-                for (int i = 0; i < boltPointCount; i++) {
-                    boltX[i] = bx;
-                    boltY[i] = by;
-                    if (i < boltPointCount - 1) {
-                        float jitter = dp(8f + (float)Math.random() * 8f);
-                        bx = Math.max(minX, Math.min(maxX,
-                                bx - jitter + (float)Math.random() * jitter * 2f));
-                        by = endY * (i + 1f) / (boltPointCount - 1f);
-                    }
+                float minX = getWidth() * 0.15f;
+                float maxX = getWidth() * 0.85f;
+                boltPointCount = 1;
+                boltX[0] = bx;
+                boltY[0] = by;
+                while (by < endY && boltPointCount < boltX.length) {
+                    bx = Math.max(minX, Math.min(maxX,
+                            bx + ((float)Math.random() - 0.5f) * dp(50f)));
+                    by += dp(15f + (float)Math.random() * 30f);
+                    boltX[boltPointCount] = bx;
+                    boltY[boltPointCount] = by;
+                    boltPointCount++;
                 }
                 flashIntensity = 1f;
-                nextLightningAt = now + 3500L + (long)(Math.random() * 5500L);
+                lastLightningFrameAt = now;
+                nextLightningAt = now + 3000L + (long)(Math.random() * 6000L);
             }
 
             if (flashIntensity > 0f) {
-                // Keep the full-screen flash barely perceptible; the narrow bolt is the focus.
-                flashPaint.setColor(Color.argb(Math.round(255f * flashIntensity * 0.035f), 221, 232, 255));
+                float frameSeconds = lastLightningFrameAt == 0L
+                        ? 0.045f
+                        : Math.min(0.10f, Math.max(0.0f, (now - lastLightningFrameAt) / 1000f));
+                lastLightningFrameAt = now;
+
+                // Match the web flash: 12% screen wash, 85% bolt opacity and 14px glow.
+                flashPaint.setColor(Color.argb(Math.round(255f * flashIntensity * 0.12f), 221, 232, 255));
                 c.drawRect(0, 0, getWidth(), getHeight(), flashPaint);
 
-                p.setColor(Color.argb(Math.round(255f * flashIntensity * 0.88f), 242, 247, 255));
+                p.setColor(Color.argb(Math.round(255f * flashIntensity * 0.85f), 234, 241, 255));
                 p.setStyle(Paint.Style.STROKE);
                 p.setStrokeCap(Paint.Cap.ROUND);
                 p.setStrokeJoin(Paint.Join.ROUND);
-                p.setStrokeWidth(dp(1.35f));
-                p.setShadowLayer(dp(5f), 0, 0, 0xFF9DB8FF);
+                p.setStrokeWidth(dp(1.6f));
+                p.setShadowLayer(dp(14f), 0, 0, 0xFF9DB8FF);
 
                 Path path = new Path();
                 if (boltPointCount > 0) {
@@ -2414,7 +2422,8 @@ public class MainActivity extends Activity {
                     c.drawPath(path, p);
                 }
                 p.clearShadowLayer();
-                flashIntensity = Math.max(0f, flashIntensity - 0.16f);
+                flashIntensity = Math.max(0f, flashIntensity - 2.2f * frameSeconds);
+                if (flashIntensity == 0f) lastLightningFrameAt = 0L;
             }
         }
 
