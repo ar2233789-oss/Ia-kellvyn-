@@ -9,9 +9,14 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.LinearGradient;
+import android.graphics.Rect;
+import android.graphics.RectF;
+import android.graphics.Shader;
 import android.graphics.Path;
 import android.graphics.Typeface;
 import android.net.Uri;
@@ -2907,6 +2912,10 @@ public class MainActivity extends Activity {
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint leafPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint flashPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint rainSpritePaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        private final Rect rainSpriteSource = new Rect(0, 0, 4, 64);
+        private final float[] rainWidth = new float[count];
+        private Bitmap rainSprite;
         private final Choreographer.FrameCallback frameCallback = new Choreographer.FrameCallback() {
             @Override public void doFrame(long frameTimeNanos) {
                 frameScheduled = false;
@@ -2972,6 +2981,18 @@ public class MainActivity extends Activity {
         }
 
         private void init() {
+            // Match DigitalRain's cached 4x64 transparent-to-blue rain sprite.
+            rainSprite = Bitmap.createBitmap(4, 64, Bitmap.Config.ARGB_8888);
+            Canvas spriteCanvas = new Canvas(rainSprite);
+            Paint spriteFill = new Paint(Paint.ANTI_ALIAS_FLAG);
+            spriteFill.setShader(new LinearGradient(
+                    0f, 0f, 0f, 64f,
+                    new int[]{0x00CFE3F2, 0xFFDCEBF8},
+                    null,
+                    Shader.TileMode.CLAMP));
+            spriteCanvas.drawRect(1f, 0f, 3f, 64f, spriteFill);
+            spriteFill.setShader(null);
+
             for (int i=0;i<count;i++) {
                 x[i] = (float)Math.random()*Math.max(1,getWidth());
                 y[i] = (float)Math.random()*Math.max(1,getHeight());
@@ -2979,6 +3000,7 @@ public class MainActivity extends Activity {
                 // Store physical pixels/second here and integrate with measured frame delta.
                 speed[i] = dp(140f) + (float)Math.random()*dp(380f);
                 len[i] = dp(18) + (float)Math.random()*dp(50);
+                rainWidth[i] = dp(Math.random() > 0.8 ? 3.2f : 2f);
                 opacity[i] = 0.15f + (float)Math.random()*0.40f;
             }
             for (int i=0;i<particleCount;i++) {
@@ -2994,19 +3016,13 @@ public class MainActivity extends Activity {
         }
 
         private void drawRain(Canvas c, float dt) {
-            p.setStrokeWidth(dp(1.25f));
             for (int i=0;i<count;i++) {
-                // This is still the original native three-segment trail; timed video will
-                // quantify its cadence before any separate sprite/gradient rendering change.
-                int alpha = Math.round(opacity[i] * 255f);
-                float mid = y[i] + len[i] * 0.34f;
-                float lower = y[i] + len[i] * 0.72f;
-                p.setColor(Color.argb(Math.round(alpha * 0.12f), 220, 235, 248));
-                c.drawLine(x[i], y[i], x[i] - dp(0.35f), mid, p);
-                p.setColor(Color.argb(Math.round(alpha * 0.45f), 220, 235, 248));
-                c.drawLine(x[i] - dp(0.35f), mid, x[i] - dp(0.70f), lower, p);
-                p.setColor(Color.argb(alpha, 220, 235, 248));
-                c.drawLine(x[i] - dp(0.70f), lower, x[i] - dp(1.0f), y[i] + len[i], p);
+                // Draw the same cached transparent-to-solid sprite as the WebView reference.
+                rainSpritePaint.setAlpha(Math.round(opacity[i] * 255f));
+                RectF destination = new RectF(
+                        x[i], y[i] - len[i],
+                        x[i] + rainWidth[i], y[i]);
+                c.drawBitmap(rainSprite, rainSpriteSource, destination, rainSpritePaint);
                 if (running) {
                     y[i] += speed[i] * dt;
                     if (y[i] > getHeight()) {
