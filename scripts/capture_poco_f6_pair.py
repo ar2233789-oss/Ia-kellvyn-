@@ -20,7 +20,34 @@ REF_COMPONENT = "com.kellvyn.labreference/.ReferenceActivity"
 APP_COMPONENT = "com.kellvyn.assistant/.MainActivity"
 REF_PACKAGE = "com.kellvyn.labreference"
 APP_PACKAGE = "com.kellvyn.assistant"
+def parse_webview_raf_metrics(log: str) -> list[dict]:
+    """Extract requestAnimationFrame telemetry emitted by the WebView bridge."""
+    samples = []
+    for line in log.splitlines():
+        match = re.search(r"RAF_METRIC (\{.*\})", line)
+        if not match:
+            continue
+        try:
+            value = json.loads(match.group(1))
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict) and isinstance(value.get("fps"), (int, float)):
+            samples.append(value)
+    return samples
+
+
+def parse_native_render_metrics(log: str) -> list[dict[str, int]]:
+    """Extract per-second Choreographer FPS and frame-delta telemetry."""
+    return [
+        {"fps": int(fps), "frameDeltaMs": int(delta)}
+        for fps, delta in re.findall(r"renderFps=(\d+)\s+frameDeltaMs=(\d+)", log)
+    ]
+
+
 SCREEN_W, SCREEN_H, DENSITY = 1220, 2712, 440
+ANIMATION_DIR = OUT / "animation"
+ANIMATION_SECONDS = 45
+ANIMATION_VIDEO_SIZE = "720x1600"
 
 
 def adb(*args: str, timeout: int = 30, check: bool = True) -> str:
@@ -57,6 +84,46 @@ def capture(name: str, folder: Path) -> Path:
     return target
 
 
+def record_animation_video(name: str, folder: Path, duration_seconds: int = ANIMATION_SECONDS) -> Path:
+    """Record the actual Android display continuously; never infer animation from a still image."""
+    folder.mkdir(parents=True, exist_ok=True)
+    remote = f"/sdcard/{name}.mp4"
+    target = folder / f"{name}.mp4"
+    adb("shell", "rm", "-f", remote, timeout=15, check=False)
+    print(
+        f"ANIMATION_RECORD_START name={name} seconds={duration_seconds} "
+        f"size={ANIMATION_VIDEO_SIZE} fps=device-display",
+        flush=True,
+    )
+    result = subprocess.run(
+        [
+            "adb", "shell", "screenrecord",
+            "--size", ANIMATION_VIDEO_SIZE,
+            "--bit-rate", "5000000",
+            "--time-limit", str(duration_seconds),
+            remote,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=duration_seconds + 35,
+        check=False,
+    )
+    if result.returncode:
+        raise RuntimeError(
+            f"Android screenrecord failed for {name} ({result.returncode}): "
+            f"{(result.stderr or result.stdout).strip()}"
+        )
+    adb("pull", remote, str(target), timeout=100)
+    adb("shell", "rm", "-f", remote, timeout=15, check=False)
+    if not target.is_file() or target.stat().st_size < 100_000:
+        raise RuntimeError(f"Animation recording {target} is missing or too small.")
+    print(
+        f"ANIMATION_RECORDED {target.as_posix()} bytes={target.stat().st_size}",
+        flush=True,
+    )
+    return target
+
+
 def wait_reference_state(state: str, timeout: int = 75) -> None:
     deadline = time.monotonic() + timeout
     last_log = ""
@@ -90,7 +157,29 @@ def capture_reference_state(state: str) -> Path:
     )
     wait_reference_state(state)
     time.sleep(0.8)
-    return capture(f"webview-{state}", WEB)
+    screenshot = capture(f"webview-{state}", WEB)
+    if state == "effects-main":
+        # Record real movement, then preserve the WebView requestAnimationFrame telemetry.
+        web_video_dir = ANIMATION_DIR / "webview"
+        record_animation_video("webview-rain-lightning", web_video_dir)
+        web_log = adb("logcat", "-d", "-s", "KellvynWebViewLab:I", timeout=45, check=False)
+        (web_video_dir / "webview-animation-logcat.txt").write_text(web_log, encoding="utf-8")
+        raf_metrics = parse_webview_raf_metrics(web_log)
+        fps_values = [float(item["fps"]) for item in raf_metrics if isinstance(item.get("fps"), (int, float))]
+        runtime_metrics = {
+            "source": "requestAnimationFrame callback counter in frozen WebView reference",
+            "samples": raf_metrics,
+            "sampleCount": len(fps_values),
+            "meanFps": round(float(np.mean(fps_values)), 3) if fps_values else None,
+            "medianFps": round(float(np.median(fps_values)), 3) if fps_values else None,
+            "p10Fps": round(float(np.percentile(fps_values, 10)), 3) if fps_values else None,
+            "p90Fps": round(float(np.percentile(fps_values, 90)), 3) if fps_values else None,
+        }
+        (web_video_dir / "webview-runtime-metrics.json").write_text(
+            json.dumps(runtime_metrics, indent=2) + "\n", encoding="utf-8"
+        )
+        print("WEBVIEW_RUNTIME_METRICS " + json.dumps(runtime_metrics), flush=True)
+    return screenshot
 
 def screenshot_array(path: Path) -> np.ndarray:
     return np.asarray(Image.open(path).convert("RGB"), dtype=np.int16)
@@ -277,6 +366,7 @@ def capture_native_states() -> dict:
     adb("install", "-r", "artifacts/apk/app-debug.apk", timeout=180)
     adb("shell", "pm", "clear", APP_PACKAGE, timeout=45)
     adb("shell", "am", "force-stop", APP_PACKAGE, timeout=30)
+    adb("logcat", "-c", timeout=15)
     adb("shell", "am", "start", "-n", APP_COMPONENT, timeout=45)
     time.sleep(8)
 
@@ -321,19 +411,43 @@ def capture_native_states() -> dict:
     if "com.kellvyn.assistant/.MainActivity" not in activity:
         raise RuntimeError("Native app left the foreground after closing effects Settings.")
     capture("native-effects-main", NATIVE)
+    native_animation = record_animation_video(
+        "native-rain-lightning",
+        ANIMATION_DIR / "native",
+    )
 
     (NATIVE / "native-meminfo.txt").write_text(
         adb("shell", "dumpsys", "meminfo", APP_PACKAGE, timeout=45),
         encoding="utf-8",
     )
-    (NATIVE / "native-logcat.txt").write_text(
-        adb("logcat", "-d", "-t", "2500", timeout=45),
-        encoding="utf-8",
+    native_log = adb("logcat", "-d", "-t", "2500", timeout=45)
+    (NATIVE / "native-logcat.txt").write_text(native_log, encoding="utf-8")
+    native_render_log = adb("logcat", "-d", "-s", "KellvynRainView:I", timeout=45, check=False)
+    animation_dir = ANIMATION_DIR / "native"
+    (animation_dir / "native-animation-logcat.txt").write_text(native_render_log, encoding="utf-8")
+    native_samples = parse_native_render_metrics(native_render_log)
+    fps_values = [item["fps"] for item in native_samples]
+    native_runtime_metrics = {
+        "source": "RainView Choreographer onDraw frame counter",
+        "samples": native_samples,
+        "sampleCount": len(fps_values),
+        "meanFps": round(float(np.mean(fps_values)), 3) if fps_values else None,
+        "medianFps": round(float(np.median(fps_values)), 3) if fps_values else None,
+        "p10Fps": round(float(np.percentile(fps_values, 10)), 3) if fps_values else None,
+        "p90Fps": round(float(np.percentile(fps_values, 90)), 3) if fps_values else None,
+    }
+    (animation_dir / "native-runtime-metrics.json").write_text(
+        json.dumps(native_runtime_metrics, indent=2) + "\n", encoding="utf-8"
     )
+    print("NATIVE_RUNTIME_METRICS " + json.dumps(native_runtime_metrics), flush=True)
     return {
         "goldPalettePreference": gold_pref,
         "rainLightningPreference": effects_pref,
         "settingsOpenedBy": "Android UIAutomator accessibility label",
+        "animationVideo": str(native_animation),
+        "animationDurationSeconds": ANIMATION_SECONDS,
+        "animationVideoSize": ANIMATION_VIDEO_SIZE,
+        "animationValidation": "continuous MP4 recordings; screenshots are not used as animation evidence",
     }
 
 def environment_report() -> dict:
@@ -399,6 +513,10 @@ def main() -> int:
         "webViewStates": ["main", "settings", "gold-settings", "gold-main", "effects-settings", "effects-main"],
         "nativeStates": ["main", "settings", "gold-settings", "main after gold palette", "effects-settings", "effects-main"],
         "nativeChecks": native_result,
+        "animationRuntimeMetrics": {
+            "webView": json.loads((ANIMATION_DIR / "webview" / "webview-runtime-metrics.json").read_text(encoding="utf-8")),
+            "native": json.loads((ANIMATION_DIR / "native" / "native-runtime-metrics.json").read_text(encoding="utf-8")),
+        },
         "environment": env,
         "note": "This AVD is a Poco F6 virtual profile, not a physical Poco F6/HyperOS device. The WebView reference is test-only and is not part of the Kellvyn release APK.",
     }
