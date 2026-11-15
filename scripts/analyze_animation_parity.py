@@ -27,10 +27,12 @@ def detect_flash_events(
     values = np.asarray(brightness, dtype=np.float32)
     if values.size < 3 or fps <= 0:
         return [], float(np.median(values)) if values.size else 0.0, minimum_delta
-    baseline_count = max(3, min(values.size, round(fps * baseline_seconds)))
-    baseline_values = values[:baseline_count]
-    baseline = float(np.median(baseline_values))
-    mad = float(np.median(np.abs(baseline_values - baseline)))
+    # Do not use the recording's first second as its baseline: the native app may
+    # legitimately flash before screenrecord begins (it is enabled while Settings closes).
+    # The median of the complete clip is robust because short lightning events occupy
+    # only a small fraction of the 40–45 second capture.
+    baseline = float(np.median(values))
+    mad = float(np.median(np.abs(values - baseline)))
     threshold = max(minimum_delta, 5.0 * 1.4826 * mad)
     active = values > baseline + threshold
     indexes = np.flatnonzero(active)
@@ -50,8 +52,10 @@ def detect_flash_events(
         start, end = group[0], group[-1]
         peak = float(np.max(values[group]) - baseline)
         duration = max(1.0 / fps, (end - start + 1) / fps)
-        # Lightning wash is global and brief. Reject long layout/panel transitions.
-        if duration <= 1.2 and peak >= threshold:
+        # On the virtual AVD the WebView may render below 30fps; its reference
+        # delta-time cap makes a real lightning wash last longer in wall-clock time.
+        # Accept up to four seconds, but reject longer panel/system transitions.
+        if duration <= 4.0 and peak >= threshold:
             events.append({
                 "startSeconds": round(start / fps, 3),
                 "durationSeconds": round(duration, 3),
@@ -91,6 +95,7 @@ def analyze_frames(frames: np.ndarray, sample_fps: int = SAMPLE_FPS) -> dict[str
         "sampledDurationSeconds": round((frames.shape[0] - 1) / sample_fps, 3),
         "meanScreenLuminance": round(float(means.mean()), 4),
         "baselineLuminance": round(baseline, 4),
+        "baselineMethod": "robust median and MAD across the full recording; avoids a startup flash contaminating the baseline",
         "flashDetectionThreshold": round(threshold, 4),
         "lightningEventCount": len(events),
         "lightningEvents": events,
