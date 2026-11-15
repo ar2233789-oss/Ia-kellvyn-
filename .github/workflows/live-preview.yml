@@ -1,0 +1,317 @@
+name: Kellvyn Studio live Android monitor
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/live-preview.yml'
+      - 'scripts/live_preview_server.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kellvyn-studio-live-preview
+  cancel-in-progress: true
+
+jobs:
+  live-preview:
+    name: Stream WebView and native Android side by side
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout the isolated lab
+        uses: actions/checkout@v4
+
+      - name: Configure Java and Gradle
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Configure Python tools
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Android, image and tunnel tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check numpy pillow
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          test -n "$SDKMANAGER"
+          export ANDROID_HOME="$SDK_ROOT" ANDROID_SDK_ROOT="$SDK_ROOT"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/emulator" >> "$GITHUB_PATH"
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          set -o pipefail
+          "$SDKMANAGER" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "platform-tools" \
+            "emulator" \
+            "system-images;android-35;google_apis;x86_64"
+          curl -fsSL --retry 3 \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            -o /tmp/cloudflared
+          chmod +x /tmp/cloudflared
+          /tmp/cloudflared version
+
+      - name: Build the native APK and isolated WebView reference APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle -p snapshot/android testDebugUnitTest assembleDebug --no-daemon --stacktrace
+          gradle -p lab-reference-android assembleDebug --no-daemon --stacktrace
+          NATIVE="snapshot/android/app/build/outputs/apk/debug/app-debug.apk"
+          REFERENCE="lab-reference-android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$NATIVE" && test -s "$REFERENCE"
+          unzip -t "$NATIVE" >/dev/null
+          unzip -t "$REFERENCE" >/dev/null
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$NATIVE" | grep -F "package: name='com.kellvyn.assistant'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$REFERENCE" | grep -F "package: name='com.kellvyn.labreference'"
+
+      - name: Build and start the original web reference
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd snapshot
+          bun install --frozen-lockfile
+          bun run test
+          bun run build
+          bun run dev -- --host 127.0.0.1 --port 4173 --strictPort > /tmp/kellvyn-web.log 2>&1 &
+          echo $! > /tmp/kellvyn-web.pid
+          cd ..
+          READY=0
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then READY=1; break; fi
+            sleep 2
+          done
+          if [ "$READY" != "1" ]; then cat /tmp/kellvyn-web.log; exit 1; fi
+
+      - name: Create two identical PocoF6Virtual profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p artifacts/poco-f6
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          bash scripts/prepare_poco_f6_virtual.sh
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          AVDMANAGER="$(dirname "$SDKMANAGER")/avdmanager"
+          if ! "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fxq "PocoF6Web"; then
+            echo "no" | "$AVDMANAGER" create avd --force \
+              --name PocoF6Web \
+              --package "system-images;android-35;google_apis;x86_64" \
+              --device "pixel_7"
+          fi
+          python - "$ANDROID_AVD_HOME/PocoF6Web.avd/config.ini" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          path = Path(sys.argv[1])
+          values = {
+              "hw.lcd.width": "1220",
+              "hw.lcd.height": "2712",
+              "hw.lcd.density": "440",
+              "hw.ramSize": "8192",
+              "hw.cpu.ncore": "4",
+              "hw.gpu.enabled": "yes",
+              "hw.gpu.mode": "swiftshader_indirect",
+              "disk.dataPartition.size": "4096M",
+          }
+          lines = path.read_text(encoding="utf-8").splitlines()
+          config = dict(line.split("=", 1) for line in lines if "=" in line)
+          config.update(values)
+          path.write_text("".join(f"{key}={value}\n" for key, value in config.items()), encoding="utf-8")
+          mismatches = {key: {"expected": value, "actual": config.get(key)} for key, value in values.items() if config.get(key) != value}
+          if mismatches:
+              print(json.dumps(mismatches, indent=2))
+              raise SystemExit(1)
+          print("PocoF6Web profile matched:", json.dumps(values, sort_keys=True))
+          PY
+
+      - name: Boot both Android 15 virtual devices
+        shell: bash
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+          "$ANDROID_HOME/emulator/emulator" \
+            -avd PocoF6Virtual -port 5554 -no-window -no-audio -no-boot-anim \
+            -no-snapshot -gpu swiftshader_indirect -camera-back none -memory 8192 -cores 4 \
+            > /tmp/pocof6-native-emulator.log 2>&1 &
+          NATIVE_EMULATOR_PID=$!
+          "$ANDROID_HOME/emulator/emulator" \
+            -avd PocoF6Web -port 5556 -no-window -no-audio -no-boot-anim \
+            -no-snapshot -gpu swiftshader_indirect -camera-back none -memory 8192 -cores 4 \
+            > /tmp/pocof6-webview-emulator.log 2>&1 &
+          WEB_EMULATOR_PID=$!
+          echo "$NATIVE_EMULATOR_PID" > /tmp/pocof6-native-emulator.pid
+          echo "$WEB_EMULATOR_PID" > /tmp/pocof6-webview-emulator.pid
+          wait_for_boot() {
+            local serial="$1" booted=0
+            for attempt in $(seq 1 150); do
+              if ! adb -s "$serial" get-state 2>/dev/null | grep -qx device; then
+                sleep 4
+                continue
+              fi
+              value="$(timeout 10s adb -s "$serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+              if [ "$value" = "1" ]; then booted=1; break; fi
+              sleep 4
+            done
+            if [ "$booted" != "1" ]; then
+              echo "$serial did not finish Android boot"
+              return 1
+            fi
+            adb -s "$serial" shell wm size 1220x2712
+            adb -s "$serial" shell wm density 440
+          }
+          wait_for_boot emulator-5554 &
+          WAIT_NATIVE=$!
+          wait_for_boot emulator-5556 &
+          WAIT_WEB=$!
+          wait "$WAIT_NATIVE"
+          wait "$WAIT_WEB"
+          adb devices
+
+      - name: Put the live reference and native app into matching rain and lightning states
+        shell: bash
+        timeout-minutes: 25
+        run: |
+          set -euo pipefail
+          adb -s emulator-5554 reverse tcp:4173 tcp:4173
+          adb -s emulator-5556 reverse tcp:4173 tcp:4173
+          mkdir -p artifacts/apk
+          cp snapshot/android/app/build/outputs/apk/debug/app-debug.apk artifacts/apk/app-debug.apk
+          cp lab-reference-android/app/build/outputs/apk/debug/app-debug.apk artifacts/apk/lab-reference-debug.apk
+          python -m py_compile scripts/capture_poco_f6_pair.py scripts/live_preview_server.py
+          python -m unittest discover -s scripts -p 'test_capture_poco_f6_pair.py' -v
+          # The existing verified harness leaves the native app on effects-main,
+          # with both rain and lightning enabled, and checks its persisted settings.
+          ANDROID_SERIAL=emulator-5554 python scripts/capture_poco_f6_pair.py
+          # Keep the original WebView reference visible in the second AVD.
+          adb -s emulator-5556 install -r artifacts/apk/lab-reference-debug.apk
+          adb -s emulator-5556 logcat -c
+          adb -s emulator-5556 shell am start -n com.kellvyn.labreference/.ReferenceActivity --es lab_state effects-main
+          READY=0
+          for attempt in $(seq 1 75); do
+            if adb -s emulator-5556 logcat -d -s KellvynWebViewLab:I | grep -F "READY state=effects-main" >/dev/null; then
+              READY=1
+              break
+            fi
+            if adb -s emulator-5556 logcat -d -s KellvynWebViewLab:I | grep -F "FAILED state=effects-main" >/dev/null; then
+              adb -s emulator-5556 logcat -d -s KellvynWebViewLab:I
+              exit 1
+            fi
+            sleep 2
+          done
+          if [ "$READY" != "1" ]; then
+            echo "WebView reference did not reach the rain + lightning state."
+            adb -s emulator-5556 logcat -d -s KellvynWebViewLab:I
+            exit 1
+          fi
+          echo "Both app versions are active on separate identical Poco F6 virtual profiles."
+
+      - name: Start the Studio screen feeds and open the temporary secure tunnel
+        shell: bash
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          TOKEN="$(openssl rand -hex 24)"
+          python scripts/live_preview_server.py \
+            --studio studio/index.html \
+            --webview-device emulator-5556 \
+            --native-device emulator-5554 \
+            --token "$TOKEN" \
+            --port 8787 \
+            --interval 1.0 > /tmp/kellvyn-live-server.log 2>&1 &
+          SERVER_PID=$!
+          echo "$SERVER_PID" > /tmp/kellvyn-live-server.pid
+          READY=0
+          for attempt in $(seq 1 60); do
+            if curl -fsS "http://127.0.0.1:8787/$TOKEN/health" -o /tmp/kellvyn-live-health.json; then
+              if python -c 'import json,sys; d=json.load(open(sys.argv[1])); raise SystemExit(0 if d["webview"]["connected"] and d["native"]["connected"] else 1)' /tmp/kellvyn-live-health.json; then
+                READY=1
+                break
+              fi
+            fi
+            sleep 2
+          done
+          if [ "$READY" != "1" ]; then
+            cat /tmp/kellvyn-live-server.log
+            cat /tmp/kellvyn-live-health.json 2>/dev/null || true
+            exit 1
+          fi
+          /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8787 --protocol http2 \
+            > /tmp/kellvyn-cloudflared.log 2>&1 &
+          TUNNEL_PID=$!
+          echo "$TUNNEL_PID" > /tmp/kellvyn-cloudflared.pid
+          TUNNEL_URL=""
+          for attempt in $(seq 1 90); do
+            TUNNEL_URL="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/kellvyn-cloudflared.log | head -n 1 || true)"
+            if [ -n "$TUNNEL_URL" ]; then break; fi
+            if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
+              cat /tmp/kellvyn-cloudflared.log
+              exit 1
+            fi
+            sleep 2
+          done
+          if [ -z "$TUNNEL_URL" ]; then cat /tmp/kellvyn-cloudflared.log; exit 1; fi
+          PUBLIC_READY=0
+          for attempt in $(seq 1 30); do
+            if curl -fsS "$TUNNEL_URL/$TOKEN/health" -o /tmp/kellvyn-public-health.json; then
+              PUBLIC_READY=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$PUBLIC_READY" != "1" ]; then
+            echo "The temporary tunnel did not become reachable."
+            cat /tmp/kellvyn-cloudflared.log
+            exit 1
+          fi
+          LIVE_URL="$TUNNEL_URL/$TOKEN/"
+          echo "LIVE_PREVIEW_URL=$LIVE_URL"
+          echo "## Kellvyn Studio — transmissão ao vivo" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "[$LIVE_URL]($LIVE_URL)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "WebView e APK Android nativo ativos ao mesmo tempo em dois AVDs Android 15 com perfil Poco F6." >> "$GITHUB_STEP_SUMMARY"
+          echo "A transmissão termina quando esta execução do Actions for encerrada." >> "$GITHUB_STEP_SUMMARY"
+          while kill -0 "$TUNNEL_PID" 2>/dev/null && kill -0 "$SERVER_PID" 2>/dev/null; do
+            sleep 20
+          done
+          echo "The live stream process ended."
+          exit 1
+
+      - name: Stop live services and collect diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          for file in /tmp/kellvyn-cloudflared.pid /tmp/kellvyn-live-server.pid /tmp/pocof6-native-emulator.pid /tmp/pocof6-webview-emulator.pid; do
+            if [ -f "$file" ]; then kill "$(cat "$file")" 2>/dev/null; fi
+          done
+          echo "=== Live server ==="
+          cat /tmp/kellvyn-live-server.log 2>/dev/null | tail -n 30
+          echo "=== Cloudflare tunnel ==="
+          cat /tmp/kellvyn-cloudflared.log 2>/dev/null | tail -n 50
+          echo "=== Native emulator ==="
+          tail -n 30 /tmp/pocof6-native-emulator.log 2>/dev/null
+          echo "=== WebView emulator ==="
+          tail -n 30 /tmp/pocof6-webview-emulator.log 2>/dev/null
