@@ -8,11 +8,22 @@ from PIL import Image, ImageChops, ImageEnhance
 
 
 def compare_pair(reference_path: Path, candidate_path: Path, output: Path, name: str,
-                 threshold: int = 16) -> dict:
+                 threshold: int = 16, reference_crop=(0, 0, 0, 0),
+                 candidate_crop=(0, 0, 0, 0)) -> dict:
     if not reference_path.is_file() or not candidate_path.is_file():
         raise FileNotFoundError(f"Missing image pair: {reference_path} | {candidate_path}")
     reference = Image.open(reference_path).convert("RGB")
     candidate = Image.open(candidate_path).convert("RGB")
+
+    def crop(image: Image.Image, values: tuple[int, int, int, int], label: str) -> Image.Image:
+        top, bottom, left, right = values
+        width, height = image.size
+        if min(values) < 0 or top + bottom >= height or left + right >= width:
+            raise ValueError(f"{label}: invalid crop {values} for image size {image.size}")
+        return image.crop((left, top, width - right, height - bottom))
+
+    reference = crop(reference, reference_crop, "reference")
+    candidate = crop(candidate, candidate_crop, "candidate")
     if reference.size != candidate.size:
         raise ValueError(f"{name}: dimensions differ ({reference.size} vs {candidate.size}); no resizing allowed")
     a = np.asarray(reference, dtype=np.int16)
@@ -58,6 +69,14 @@ def main() -> int:
     p.add_argument("--reference-frames", type=Path); p.add_argument("--candidate-frames", type=Path)
     p.add_argument("--output-dir", type=Path, required=True); p.add_argument("--name", default="comparison")
     p.add_argument("--channel-threshold", type=int, default=16)
+    p.add_argument("--reference-crop-top", type=int, default=0)
+    p.add_argument("--reference-crop-bottom", type=int, default=0)
+    p.add_argument("--reference-crop-left", type=int, default=0)
+    p.add_argument("--reference-crop-right", type=int, default=0)
+    p.add_argument("--candidate-crop-top", type=int, default=0)
+    p.add_argument("--candidate-crop-bottom", type=int, default=0)
+    p.add_argument("--candidate-crop-left", type=int, default=0)
+    p.add_argument("--candidate-crop-right", type=int, default=0)
     p.add_argument("--fail-over", type=float, default=None,
                    help="Optional changed-pixel limit; omit to produce diagnostic metrics only")
     a = p.parse_args()
@@ -69,7 +88,10 @@ def main() -> int:
     try:
         if static:
             if a.reference is None or a.candidate is None: p.error("both static image paths are required")
-            result = compare_pair(a.reference, a.candidate, a.output_dir, a.name, a.channel_threshold)
+            reference_crop = (a.reference_crop_top, a.reference_crop_bottom, a.reference_crop_left, a.reference_crop_right)
+            candidate_crop = (a.candidate_crop_top, a.candidate_crop_bottom, a.candidate_crop_left, a.candidate_crop_right)
+            result = compare_pair(a.reference, a.candidate, a.output_dir, a.name, a.channel_threshold,
+                                  reference_crop, candidate_crop)
             score = result["changedPixelsPercent"]
         else:
             if a.reference_frames is None or a.candidate_frames is None: p.error("both frame folders are required")
