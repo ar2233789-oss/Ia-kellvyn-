@@ -229,6 +229,8 @@ jobs:
             artifacts/poco-f6/summary.json
             artifacts/poco-f6/poco-f6-capture-report.json
             artifacts/poco-f6/poco-f6-environment.json
-            artifacts/poco-f6/comparison/**/comparison-report.json
+            artifacts/poco-f6/webview/*.png
+            artifacts/poco-f6/native/*.png
+            artifacts/poco-f6/comparison/**/*
           if-no-files-found: warn
           retention-days: 14
