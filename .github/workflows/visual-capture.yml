@@ -1,0 +1,231 @@
+name: Kellvyn visual parity captures
+on:
+  push:
+    branches: [main]
+    paths: ['snapshot/**', 'scripts/align_capture_pair.py', 'scripts/compare_screenshots.py', '.github/workflows/visual-capture.yml']
+  pull_request:
+    paths: ['snapshot/**', 'scripts/align_capture_pair.py', 'scripts/compare_screenshots.py', '.github/workflows/visual-capture.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  web-capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install and build reference
+        run: cd snapshot && bun install --frozen-lockfile && bun run test && bun run build
+      - name: Install Playwright
+        run: cd snapshot && npm install --no-save playwright && npx playwright install --with-deps chromium
+      - name: Capture web states
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd snapshot
+          mkdir -p out
+          bun run dev -- --host 127.0.0.1 --port 4173 --strictPort > /tmp/kellvyn-web.log 2>&1 &
+          for n in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then break; fi
+            [ "$n" != "60" ] || { cat /tmp/kellvyn-web.log; exit 1; }
+            sleep 2
+          done
+          node --input-type=module <<'NODE'
+          import { chromium } from "playwright";
+          const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
+          const page = await browser.newPage({ viewport: { width: 444, height: 913 }, deviceScaleFactor: 2.75, isMobile: true, hasTouch: true });
+          const errors = [];
+          page.on("pageerror", error => errors.push(String(error)));
+          await page.goto("http://127.0.0.1:4173/", { waitUntil: "networkidle", timeout: 60000 });
+          await page.getByRole("heading", { name: "Kellvyn Assistente" }).waitFor({ state: "visible" });
+          await page.screenshot({ path: "out/web-reference.png" });
+          await page.getByRole("button", { name: "Configurações", exact: true }).click();
+          await page.getByRole("heading", { name: "CONFIGURAÇÕES DO KELLVYN" }).waitFor({ state: "visible" });
+          await page.screenshot({ path: "out/web-settings.png" });
+          await page.getByRole("button", { name: "Preto e Dourado", exact: true }).click();
+          await page.waitForTimeout(350);
+          await page.screenshot({ path: "out/web-settings-gold.png" });
+          await page.getByRole("button", { name: "Fechar", exact: true }).last().click();
+          await page.getByRole("heading", { name: "Kellvyn Assistente" }).waitFor({ state: "visible" });
+          await page.screenshot({ path: "out/web-main-gold.png" });
+          if (errors.length) throw new Error("Web errors: " + errors.join(" | "));
+          await browser.close();
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kellvyn-web-captures
+          path: snapshot/out/*.png
+          if-no-files-found: error
+          retention-days: 7
+
+  native-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="$ANDROID_HOME"
+          if [ -z "$SDK_ROOT" ]; then SDK_ROOT=/usr/local/lib/android/sdk; fi
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          test -n "$SDKMANAGER"
+          export ANDROID_HOME="$SDK_ROOT" ANDROID_SDK_ROOT="$SDK_ROOT"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          set +o pipefail; yes | "$SDKMANAGER" --licenses >/dev/null; set -o pipefail
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+      - name: Test and build native candidate
+        working-directory: snapshot/android
+        run: gradle testDebugUnitTest assembleDebug --no-daemon --stacktrace
+      - name: Verify native APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=snapshot/android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.kellvyn.assistant'"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$APK"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kellvyn-native-debug-apk
+          path: snapshot/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  native-capture:
+    needs: [native-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: kellvyn-native-debug-apk
+          path: artifacts/apk
+      - name: Capture native UI on Android 15
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          cores: 4
+          ram-size: 8192M
+          heap-size: 512M
+          disk-size: 8G
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: |
+            set -euo pipefail
+            mkdir -p artifacts/native
+            adb shell wm size 1220x2712
+            adb shell wm density 440
+            adb install -r artifacts/apk/app-debug.apk
+            adb shell am start -W -n com.kellvyn.assistant/.MainActivity
+            sleep 8
+            capture() {
+              local remote="$1" dest="$2"
+              adb shell screencap -p "$remote"
+              adb pull "$remote" "$dest" >/dev/null
+              test -s "$dest"
+            }
+            dump_ui() {
+              rm -f artifacts/native/current-ui.xml
+              adb shell uiautomator dump /sdcard/kellvyn-lab-ui.xml >/dev/null 2>&1
+              adb pull /sdcard/kellvyn-lab-ui.xml artifacts/native/current-ui.xml >/dev/null
+            }
+            tap_label() {
+              local mode="$1" label="$2" point
+              dump_ui
+              point="$(python3 - "$mode" "$label" artifacts/native/current-ui.xml <<'PY'
+            import re, sys, xml.etree.ElementTree as ET
+            mode, label, filename = sys.argv[1:]
+            attr = "content-desc" if mode == "desc" else "text"
+            root = ET.parse(filename).getroot()
+            nodes = [n for n in root.iter("node") if n.attrib.get(attr, "").strip().casefold() == label.casefold()]
+            if not nodes: raise SystemExit(f"Missing UI label {mode}={label}")
+            parent = {child: node for node in root.iter("node") for child in node}
+            node = nodes[0]
+            while node in parent and node.attrib.get("clickable") != "true": node = parent[node]
+            match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.attrib.get("bounds", ""))
+            if not match: raise SystemExit(f"No clickable bounds for {label}")
+            x1,y1,x2,y2 = map(int, match.groups())
+            print((x1+x2)//2, (y1+y2)//2)
+            PY
+              )"
+              read -r x y <<< "$point"
+              adb shell input tap "$x" "$y"
+              sleep 2
+            }
+            capture /sdcard/native-screen.png artifacts/native/native-screen.png
+            tap_label desc "Configurações"
+            capture /sdcard/native-settings.png artifacts/native/native-settings.png
+            tap_label text "Preto e Dourado"
+            capture /sdcard/native-main-gold.png artifacts/native/native-main-gold.png
+            tap_label desc "Configurações"
+            capture /sdcard/native-settings-gold.png artifacts/native/native-settings-gold.png
+            adb shell dumpsys meminfo com.kellvyn.assistant > artifacts/native/native-meminfo.txt
+            adb logcat -d -t 1500 > artifacts/native/native-logcat.txt
+      - name: Upload native screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kellvyn-native-captures
+          path: artifacts/native/*
+          if-no-files-found: warn
+          retention-days: 7
+
+  compare-captures:
+    needs: [web-capture, native-capture]
+    if: always() && needs.web-capture.result == 'success' && needs.native-capture.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check numpy pillow
+      - uses: actions/download-artifact@v4
+        with:
+          name: kellvyn-web-captures
+          path: artifacts/web
+      - uses: actions/download-artifact@v4
+        with:
+          name: kellvyn-native-captures
+          path: artifacts/native
+      - name: Align and compare screen states
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/aligned artifacts/comparison
+          compare_pair() {
+            local name="$1" web="$2" native="$3"
+            python scripts/align_capture_pair.py --reference "artifacts/web/$web" --candidate "artifacts/native/$native" --output-dir artifacts/aligned --name "$name" --candidate-top-px 136
+            python scripts/compare_screenshots.py --reference "artifacts/aligned/$name-reference-aligned.png" --candidate "artifacts/aligned/$name-candidate-aligned.png" --output-dir artifacts/comparison --name "$name" --channel-threshold 16
+          }
+          compare_pair main web-reference.png native-screen.png
+          compare_pair settings web-settings.png native-settings.png
+          compare_pair settings-gold web-settings-gold.png native-settings-gold.png
+          compare_pair main-gold web-main-gold.png native-main-gold.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kellvyn-visual-comparisons
+          path: |
+            artifacts/aligned/*
+            artifacts/comparison/*
+          if-no-files-found: error
+          retention-days: 14
