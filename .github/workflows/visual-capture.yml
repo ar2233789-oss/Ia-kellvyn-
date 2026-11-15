@@ -10,6 +10,8 @@ on:
       - 'scripts/prepare_poco_f6_virtual.sh'
       - 'scripts/capture_poco_f6_pair.py'
       - 'scripts/test_capture_poco_f6_pair.py'
+      - 'scripts/analyze_animation_parity.py'
+      - 'scripts/test_analyze_animation_parity.py'
       - 'scripts/compare_screenshots.py'
       - '.github/workflows/visual-capture.yml'
   pull_request:
@@ -19,6 +21,8 @@ on:
       - 'lab-reference-android/**'
       - 'scripts/prepare_poco_f6_virtual.sh'
       - 'scripts/capture_poco_f6_pair.py'
+      - 'scripts/analyze_animation_parity.py'
+      - 'scripts/test_analyze_animation_parity.py'
       - 'scripts/compare_screenshots.py'
       - '.github/workflows/visual-capture.yml'
   workflow_dispatch:
@@ -99,12 +103,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install comparison tools
-        run: python -m pip install --disable-pip-version-check numpy pillow
-      - name: Preflight capture harness and Android preference parser tests
+      - name: Install comparison and video-analysis tools
+        shell: bash
         run: |
-          python -m py_compile scripts/capture_poco_f6_pair.py
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check numpy pillow
+          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+          ffmpeg -version | head -n 1
+          ffprobe -version | head -n 1
+      - name: Preflight capture harness, video analyzer and unit tests
+        run: |
+          python -m py_compile scripts/capture_poco_f6_pair.py scripts/analyze_animation_parity.py
           python -m unittest discover -s scripts -p 'test_capture_poco_f6_pair.py' -v
+          python -m unittest discover -s scripts -p 'test_analyze_animation_parity.py' -v
       - uses: oven-sh/setup-bun@v2
       - name: Build the web reference and start its local server
         shell: bash
@@ -180,6 +194,10 @@ jobs:
           adb shell wm density 440
           adb reverse tcp:4173 tcp:4173
           python scripts/capture_poco_f6_pair.py
+          python scripts/analyze_animation_parity.py \
+            --webview artifacts/poco-f6/animation/webview/webview-rain-lightning.mp4 \
+            --native artifacts/poco-f6/animation/native/native-rain-lightning.mp4 \
+            --output artifacts/poco-f6/animation-parity-report.json
           compare_pair() {
             local name="$1" reference="$2" candidate="$3"
             python scripts/compare_screenshots.py \
@@ -229,6 +247,8 @@ jobs:
             artifacts/poco-f6/summary.json
             artifacts/poco-f6/poco-f6-capture-report.json
             artifacts/poco-f6/poco-f6-environment.json
+            artifacts/poco-f6/animation-parity-report.json
+            artifacts/poco-f6/animation/**/*.mp4
             artifacts/poco-f6/webview/*.png
             artifacts/poco-f6/native/*.png
             artifacts/poco-f6/comparison/**/*
