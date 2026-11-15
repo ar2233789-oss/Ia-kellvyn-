@@ -176,6 +176,12 @@ public final class ReferenceActivity extends Activity {
                 "if(!already){lightning.scrollIntoView({block:'center'});invokeReactClick(lightning);}" +
                 "const both=await waitFor(()=>{try{const p=JSON.parse(localStorage.getItem('kv.settings')||'{}');return Array.isArray(p.effect)&&p.effect.includes('chuva')&&p.effect.includes('raios');}catch(e){return false;}});" +
                 "if(!both){report(false,'rain and lightning were not both persisted');return 'rain-lightning-not-persisted';}" +
+                "const panelSection=title.closest('section');" +
+                "const panelScroll=panelSection&&panelSection.querySelector('.overflow-y-auto');" +
+                "if(!panelScroll){report(false,'settings scroll area missing after enabling effects');return 'effects-scroll-area-missing';}" +
+                "panelScroll.scrollTop=0;" +
+                "await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));" +
+                "await new Promise(resolve=>setTimeout(resolve,300));" +
                 "if(state==='effects-main'){" +
                 "const close=await waitFor(()=>document.querySelector('button[aria-label=\\\"Fechar\\\"]'));" +
                 "if(!close){report(false,'settings close button missing after enabling lightning');return 'effects-close-missing';}" +
