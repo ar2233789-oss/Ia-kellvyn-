@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import time
 import xml.etree.ElementTree as ET
@@ -140,6 +141,69 @@ def verify_native_gold() -> dict:
     return {"expectedSignedArgb": expected, "actualSignedArgb": actual, "passed": True}
 
 
+def native_ui_tree():
+    remote = "/sdcard/kellvyn-layout-ui.xml"
+    adb("shell", "uiautomator", "dump", remote, timeout=45)
+    raw = adb("shell", "cat", remote, timeout=20)
+    return ET.fromstring(raw)
+
+
+def native_label_point(label: str) -> tuple[int, int] | None:
+    root = native_ui_tree()
+    parents = {child: node for node in root.iter("node") for child in node}
+    for node in root.iter("node"):
+        if node.attrib.get("text", "").strip() != label:
+            continue
+        target = node
+        while target is not None and target.attrib.get("clickable") != "true":
+            target = parents.get(target)
+        if target is None:
+            target = node
+        match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",
+                             target.attrib.get("bounds", ""))
+        if match:
+            x1, y1, x2, y2 = map(int, match.groups())
+            return (x1 + x2) // 2, (y1 + y2) // 2
+    return None
+
+
+def wait_native_label(label: str, timeout: int = 35) -> tuple[int, int]:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        point = native_label_point(label)
+        if point is not None:
+            return point
+        time.sleep(1)
+    raise RuntimeError(f"Native UI did not expose the expected label: {label}")
+
+
+def tap_native_label(label: str, timeout: int = 35) -> None:
+    x, y = wait_native_label(label, timeout=timeout)
+    adb("shell", "input", "tap", str(x), str(y), timeout=20)
+
+
+def verify_native_effects() -> dict:
+    raw = adb(
+        "shell", "run-as", APP_PACKAGE, "cat", "shared_prefs/kellvyn_native.xml",
+        timeout=20,
+    )
+    (NATIVE / "native-prefs.xml").write_text(raw, encoding="utf-8")
+    root = ET.fromstring(raw)
+    node = next(
+        (item for item in root if item.tag == "string" and item.attrib.get("name") == "visual_effects"),
+        None,
+    )
+    if node is None:
+        raise RuntimeError("Native visual_effects preference missing after selecting lightning.")
+    try:
+        effects = json.loads(node.attrib["value"])
+    except (KeyError, json.JSONDecodeError) as error:
+        raise RuntimeError("Native visual_effects preference is not valid JSON.") from error
+    if not {"chuva", "raios"}.issubset(set(effects)):
+        raise RuntimeError(f"Rain and lightning are not both enabled: {effects}")
+    return {"effects": effects, "passed": True}
+
+
 def capture_native_states() -> dict:
     NATIVE.mkdir(parents=True, exist_ok=True)
     adb("install", "-r", "artifacts/apk/app-debug.apk", timeout=180)
@@ -147,11 +211,9 @@ def capture_native_states() -> dict:
     adb("shell", "am", "start", "-n", APP_COMPONENT, timeout=45)
     time.sleep(12)
 
-    # Verify that the actual native activity is in the foreground before capturing.
     activity = adb("shell", "dumpsys", "activity", "activities", timeout=30)
     if "com.kellvyn.assistant/.MainActivity" not in activity:
         raise RuntimeError("Native MainActivity did not become the foreground activity.")
-    adb("logcat", "-d", "-b", "crash", timeout=20)
     crash = adb("logcat", "-d", "-b", "crash", timeout=20)
     if "Process: com.kellvyn.assistant" in crash:
         (NATIVE / "native-crash-buffer.txt").write_text(crash, encoding="utf-8")
@@ -159,14 +221,10 @@ def capture_native_states() -> dict:
 
     capture("native-main", NATIVE)
 
-    # This is the measured header control position on the 1220x2712 / 440dpi
-    # PocoF6Virtual viewport used by the original lab workflow.
+    # Capture the default settings sheet and select the measured gold palette.
     adb("shell", "input", "tap", "1170", "130", timeout=20)
     time.sleep(3)
     settings = capture("native-settings", NATIVE)
-
-    # Detect the actual visible gold preset from the live screenshot. We never
-    # tap an assumed row if the preset is not visually present.
     x, y, tap_report = locate_gold_palette(settings)
     (NATIVE / "native-palette-tap.json").write_text(
         json.dumps(tap_report, indent=2) + "\n", encoding="utf-8"
@@ -183,6 +241,22 @@ def capture_native_states() -> dict:
         raise RuntimeError("Native app left the foreground after closing Settings.")
     capture("native-gold-main", NATIVE)
 
+    # Turn on lightning while preserving rain, then verify the persisted native state.
+    adb("shell", "input", "tap", "1170", "130", timeout=20)
+    time.sleep(3)
+    wait_native_label("Raios")
+    tap_native_label("Raios")
+    time.sleep(3)
+    wait_native_label("CONFIGURAÇÕES DO KELLVYN")
+    capture("native-effects-settings", NATIVE)
+    effects_pref = verify_native_effects()
+    tap_native_label("Fechar")
+    time.sleep(2)
+    activity = adb("shell", "dumpsys", "activity", "activities", timeout=30)
+    if "com.kellvyn.assistant/.MainActivity" not in activity:
+        raise RuntimeError("Native app left the foreground after closing effects Settings.")
+    capture("native-effects-main", NATIVE)
+
     (NATIVE / "native-meminfo.txt").write_text(
         adb("shell", "dumpsys", "meminfo", APP_PACKAGE, timeout=45),
         encoding="utf-8",
@@ -191,8 +265,11 @@ def capture_native_states() -> dict:
         adb("logcat", "-d", "-t", "2500", timeout=45),
         encoding="utf-8",
     )
-    return {"goldPalettePreference": gold_pref, "paletteTap": tap_report}
-
+    return {
+        "goldPalettePreference": gold_pref,
+        "paletteTap": tap_report,
+        "rainLightningPreference": effects_pref,
+    }
 
 def environment_report() -> dict:
     def prop(name: str) -> str:
@@ -241,7 +318,7 @@ def main() -> int:
     adb("reverse", "tcp:4173", "tcp:4173", timeout=20)
     adb("install", "-r", "artifacts/apk/lab-reference-debug.apk", timeout=180)
 
-    for state in ("main", "settings", "gold-settings", "gold-main"):
+    for state in ("main", "settings", "gold-settings", "gold-main", "effects-settings", "effects-main"):
         capture_reference_state(state)
 
     native_result = capture_native_states()
@@ -254,8 +331,8 @@ def main() -> int:
         "sameDensityDpi": DENSITY,
         "webViewPackage": REF_PACKAGE,
         "nativePackage": APP_PACKAGE,
-        "webViewStates": ["main", "settings", "gold-settings", "gold-main"],
-        "nativeStates": ["main", "settings", "gold-settings", "main after gold palette"],
+        "webViewStates": ["main", "settings", "gold-settings", "gold-main", "effects-settings", "effects-main"],
+        "nativeStates": ["main", "settings", "gold-settings", "main after gold palette", "effects-settings", "effects-main"],
         "nativeChecks": native_result,
         "environment": env,
         "note": "This AVD is a Poco F6 virtual profile, not a physical Poco F6/HyperOS device. The WebView reference is test-only and is not part of the Kellvyn release APK.",
