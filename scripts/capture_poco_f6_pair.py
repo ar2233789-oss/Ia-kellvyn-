@@ -21,6 +21,9 @@ APP_COMPONENT = "com.kellvyn.assistant/.MainActivity"
 REF_PACKAGE = "com.kellvyn.labreference"
 APP_PACKAGE = "com.kellvyn.assistant"
 SCREEN_W, SCREEN_H, DENSITY = 1220, 2712, 440
+ANIMATION_DIR = OUT / "animation"
+ANIMATION_SECONDS = 45
+ANIMATION_VIDEO_SIZE = "720x1600"
 
 
 def adb(*args: str, timeout: int = 30, check: bool = True) -> str:
@@ -57,6 +60,46 @@ def capture(name: str, folder: Path) -> Path:
     return target
 
 
+def record_animation_video(name: str, folder: Path, duration_seconds: int = ANIMATION_SECONDS) -> Path:
+    """Record real-time effects as H.264 video; a still PNG cannot validate animation."""
+    folder.mkdir(parents=True, exist_ok=True)
+    remote = f"/sdcard/{name}.mp4"
+    target = folder / f"{name}.mp4"
+    adb("shell", "rm", "-f", remote, timeout=15, check=False)
+    print(
+        f"ANIMATION_RECORD_START name={name} seconds={duration_seconds} "
+        f"size={ANIMATION_VIDEO_SIZE} fps=30",
+        flush=True,
+    )
+    result = subprocess.run(
+        [
+            "adb", "shell", "screenrecord",
+            "--size", ANIMATION_VIDEO_SIZE,
+            "--bit-rate", "5000000",
+            "--time-limit", str(duration_seconds),
+            remote,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=duration_seconds + 35,
+        check=False,
+    )
+    if result.returncode:
+        raise RuntimeError(
+            f"Android screenrecord failed for {name} ({result.returncode}): "
+            f"{(result.stderr or result.stdout).strip()}"
+        )
+    adb("pull", remote, str(target), timeout=100)
+    adb("shell", "rm", "-f", remote, timeout=15, check=False)
+    if not target.is_file() or target.stat().st_size < 100_000:
+        raise RuntimeError(f"Animation recording {target} is missing or too small.")
+    print(
+        f"ANIMATION_RECORDED {target.as_posix()} bytes={target.stat().st_size}",
+        flush=True,
+    )
+    return target
+
+
 def wait_reference_state(state: str, timeout: int = 75) -> None:
     deadline = time.monotonic() + timeout
     last_log = ""
@@ -90,7 +133,13 @@ def capture_reference_state(state: str) -> Path:
     )
     wait_reference_state(state)
     time.sleep(0.8)
-    return capture(f"webview-{state}", WEB)
+    screenshot = capture(f"webview-{state}", WEB)
+    if state == "effects-main":
+        # Record 45 seconds of rain + lightning after the static reference capture.
+        # This provides enough time to observe the random 2–6s initial and 3–9s
+        # subsequent lightning intervals without treating random particles as pixel errors.
+        record_animation_video("webview-rain-lightning", ANIMATION_DIR / "webview")
+    return screenshot
 
 def screenshot_array(path: Path) -> np.ndarray:
     return np.asarray(Image.open(path).convert("RGB"), dtype=np.int16)
@@ -321,6 +370,10 @@ def capture_native_states() -> dict:
     if "com.kellvyn.assistant/.MainActivity" not in activity:
         raise RuntimeError("Native app left the foreground after closing effects Settings.")
     capture("native-effects-main", NATIVE)
+    native_animation = record_animation_video(
+        "native-rain-lightning",
+        ANIMATION_DIR / "native",
+    )
 
     (NATIVE / "native-meminfo.txt").write_text(
         adb("shell", "dumpsys", "meminfo", APP_PACKAGE, timeout=45),
@@ -334,6 +387,10 @@ def capture_native_states() -> dict:
         "goldPalettePreference": gold_pref,
         "rainLightningPreference": effects_pref,
         "settingsOpenedBy": "Android UIAutomator accessibility label",
+        "animationVideo": str(native_animation),
+        "animationDurationSeconds": ANIMATION_SECONDS,
+        "animationVideoSize": ANIMATION_VIDEO_SIZE,
+        "animationFrameRateTarget": 30,
     }
 
 def environment_report() -> dict:
