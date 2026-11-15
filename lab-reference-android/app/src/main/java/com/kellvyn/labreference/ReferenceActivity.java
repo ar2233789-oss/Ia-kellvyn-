@@ -113,42 +113,43 @@ public final class ReferenceActivity extends Activity {
         if (isFinishing() || webView == null) return;
         String state = JSONObject.quote(requestedState);
         String script =
-                "(function() {" +
+                "(async function() {" +
                 "const state=" + state + ";" +
+                "const bodyText=()=>document.body ? document.body.innerText.replace(/\\s+/g,' ').trim() : '';" +
                 "const report=(ok,reason)=>{" +
-                "const details=JSON.stringify({title:document.title,width:innerWidth,height:innerHeight,dpr:devicePixelRatio,scrollY,reason:reason||''});" +
+                "const details=JSON.stringify({title:document.title,width:innerWidth,height:innerHeight,dpr:devicePixelRatio,scrollY,reason:reason||'',body:bodyText().slice(0,1200),buttons:Array.from(document.querySelectorAll('button')).map(b=>b.innerText.replace(/\\s+/g,' ').trim()).filter(Boolean).slice(0,40)});" +
                 "if(ok) window.KellvynLab.ready(state,details); else window.KellvynLab.failed(state,reason||'unknown');" +
                 "};" +
-                "const clickByText=(text)=>Array.from(document.querySelectorAll('button')).find(b=>b.innerText.trim()===text);" +
-                "const openSettings=()=>{const b=document.querySelector('button[aria-label=\"Configurações\"]');if(!b){report(false,'settings button missing');return false;}b.click();return true;};" +
+                "const waitFor=async predicate=>{const deadline=Date.now()+10000;while(Date.now()<deadline){const value=predicate();if(value)return value;await new Promise(r=>setTimeout(r,150));}return null;};" +
                 "const done=()=>report(true,'');" +
                 "if(state==='main'){done();return 'main-ready';}" +
-                "if(!openSettings())return 'settings-open-failed';" +
-                "setTimeout(()=>{" +
-                "if(state==='settings'){done();return;}" +
+                "const settings=document.querySelector('button[aria-label=\\\"Configurações\\\"]');" +
+                "if(!settings){report(false,'settings button missing');return 'settings-open-failed';}" +
+                "settings.click();" +
+                "const title=await waitFor(()=>Array.from(document.querySelectorAll('h2')).find(h=>h.innerText.trim().toUpperCase()==='CONFIGURAÇÕES DO KELLVYN'));" +
+                "if(!title){report(false,'settings panel did not become visible after click');return 'settings-panel-missing';}" +
+                "if(state==='settings'){done();return 'settings-ready';}" +
                 "if(state==='gold-settings'||state==='gold-main'){" +
-                "const gold=clickByText('Preto e Dourado');" +
-                "if(!gold){report(false,'gold palette button missing');return;}" +
+                "const gold=await waitFor(()=>Array.from(document.querySelectorAll('button')).find(b=>b.innerText.replace(/\\s+/g,' ').trim().includes('Preto e Dourado')));" +
+                "if(!gold){report(false,'gold palette button missing after settings panel opened');return 'gold-button-missing';}" +
                 "gold.scrollIntoView({block:'center'});gold.click();" +
-                "setTimeout(()=>{" +
+                "const persisted=await waitFor(()=>{try{const p=JSON.parse(localStorage.getItem('kv.settings')||'{}');return p.color?.toUpperCase()==='#D4AF37'&&p.bg?.toUpperCase()==='#0A0907';}catch(e){return false;}});" +
+                "if(!persisted){report(false,'gold palette tap did not persist expected colors');return 'gold-palette-not-persisted';}" +
                 "if(state==='gold-main'){" +
-                "const close=document.querySelector('button[aria-label=\"Fechar\"]');" +
-                "if(close)close.click();" +
+                "const close=await waitFor(()=>document.querySelector('button[aria-label=\\\"Fechar\\\"]'));" +
+                "if(!close){report(false,'settings close button missing after gold palette');return 'settings-close-missing';}" +
+                "close.click();" +
+                "const closed=await waitFor(()=>!Array.from(document.querySelectorAll('h2')).some(h=>h.innerText.trim().toUpperCase()==='CONFIGURAÇÕES DO KELLVYN'));" +
+                "if(!closed){report(false,'settings panel did not close after gold palette');return 'settings-panel-stuck';}" +
                 "}" +
-                "setTimeout(done,700);" +
-                "},500);" +
-                "return;" +
+                "done();return state+'-ready';" +
                 "}" +
                 "if(state==='effects'){" +
-                "const lightning=clickByText('Raios');" +
-                "if(!lightning){report(false,'lightning effect button missing');return;}" +
-                "lightning.scrollIntoView({block:'center'});" +
-                "setTimeout(()=>{lightning.click();const close=document.querySelector('button[aria-label=\\\"Fechar\\\"]');if(close)close.click();setTimeout(done,700);},350);" +
-                "return;" +
+                "const lightning=await waitFor(()=>Array.from(document.querySelectorAll('button')).find(b=>b.innerText.trim()==='Raios'));" +
+                "if(!lightning){report(false,'lightning effect button missing');return 'lightning-button-missing';}" +
+                "lightning.scrollIntoView({block:'center'});lightning.click();done();return 'effects-ready';" +
                 "}" +
-                "report(false,'unsupported lab state '+state);" +
-                "},600);" +
-                "return 'state-transition-started';" +
+                "report(false,'unsupported lab state '+state);return 'unsupported-state';" +
                 "})()";
         evaluate(script);
     }
