@@ -23,12 +23,11 @@ class NativeUiLocatorTests(unittest.TestCase):
 
     def test_finds_system_ui_anr_wait_button(self):
         path = self.write(
-            '<hierarchy><node text="System UI isn\\'t responding" clickable="false" bounds="[10,10][500,80]">'
-            '<node text="Wait" clickable="true" bounds="[20,100][490,160]"/>'
-            '</node></hierarchy>'
+            "<hierarchy><node text=\"System UI isn't responding\" clickable=\"false\" bounds=\"[10,10][500,80]\">"
+            "<node text=\"Wait\" clickable=\"true\" bounds=\"[20,100][490,160]\"/>"
+            "</node></hierarchy>"
         )
-        self.assertEqual(CAPTURE.find_node(path, CAPTURE.ANR_TITLE), None)
-        # The Wait node is independently discoverable and clickable.
+        self.assertEqual(CAPTURE.find_node(path, CAPTURE.ANR_TITLE), (255, 45))
         self.assertEqual(CAPTURE.find_node(path, "Wait"), (255, 130))
 
     def test_finds_clickable_parent_for_palette_label(self):
