@@ -162,7 +162,7 @@ public class MainActivity extends Activity {
         chatScroll = new ScrollView(this);
         chatScroll.setFillViewport(true);
         chatScroll.setClipToPadding(false);
-        chatScroll.setPadding(dp(12), dp(14), dp(12), dp(14));
+        chatScroll.setPadding(dp(12), dp(16), dp(12), dp(16));
         shell.addView(chatScroll, new LinearLayout.LayoutParams(-1, 0, 1));
         messages = new LinearLayout(this);
         messages.setOrientation(LinearLayout.VERTICAL);
@@ -192,16 +192,18 @@ public class MainActivity extends Activity {
         composer.setMaxLines(4);
         composer.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         composer.setBackgroundColor(Color.TRANSPARENT);
-        composer.setPadding(dp(8), dp(10), dp(8), dp(10));
+        composer.setPadding(dp(8), dp(8), dp(8), dp(8));
+        composer.setMinHeight(dp(40));
+        composer.setIncludeFontPadding(false);
         entry.addView(composer, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout controls = new LinearLayout(this);
         controls.setGravity(Gravity.CENTER_VERTICAL);
-        controls.setPadding(0, dp(4), 0, 0);
-        composerPanel.addView(controls, new LinearLayout.LayoutParams(-1, dp(42)));
+        controls.setPadding(0, dp(2), 0, 0);
+        composerPanel.addView(controls, new LinearLayout.LayoutParams(-1, dp(34)));
 
         View plus = new LucideIconView("plus", "Anexos e Web");
-        controls.addView(plus, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        controls.addView(plus, new LinearLayout.LayoutParams(dp(32), dp(32)));
         plus.setOnClickListener(v -> showPlusMenu(v));
 
         footerStatus = text("●  Kellvyn  ⌄", 12, uiTextColor(), false);
@@ -219,12 +221,12 @@ public class MainActivity extends Activity {
         controls.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1));
 
         View mic = new LucideIconView("mic", "Ditado por voz");
-        controls.addView(mic, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        controls.addView(mic, new LinearLayout.LayoutParams(dp(32), dp(32)));
         mic.setOnClickListener(v -> startSpeech());
 
         View send = new LucideIconView("send", "Enviar mensagem");
         send.setBackground(roundRect(0x00000000, dp(18), themeAccentColor(0x8845A989), dp(1)));
-        controls.addView(send, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        controls.addView(send, new LinearLayout.LayoutParams(dp(32), dp(32)));
         send.setOnClickListener(v -> sendMessage());
 
         View navDivider = new View(this);
@@ -235,7 +237,7 @@ public class MainActivity extends Activity {
         bottomNav.setBackgroundColor(themeSurfaceColor(0xF20A1110));
         bottomNav.setPadding(dp(2), dp(3), dp(2), dp(4));
         // 67dp navigation + the divider matches the measured 67.5dp web navigation bar.
-        shell.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(67)));
+        shell.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(63)));
         addNavItem(bottomNav, "✦", "AI", () -> { composer.requestFocus(); });
         addNavItem(bottomNav, "⌕", "Navegador", this::askWebAddress);
         addNavItem(bottomNav, "</>", "Editor", this::showEditor);
@@ -411,6 +413,49 @@ public class MainActivity extends Activity {
                     canvas.drawLine(12, 20, 12, 22, iconPaint);
                     canvas.drawLine(8, 22, 16, 22, iconPaint);
                     break;
+                case "globe":
+                    canvas.drawCircle(12, 12, 9.2f, iconPaint);
+                    canvas.drawOval(7.4f, 2.8f, 16.6f, 21.2f, iconPaint);
+                    iconPath.reset();
+                    iconPath.moveTo(3.2f, 8.0f); iconPath.quadTo(12, 11.5f, 20.8f, 8.0f);
+                    iconPath.moveTo(3.2f, 16.0f); iconPath.quadTo(12, 12.5f, 20.8f, 16.0f);
+                    canvas.drawPath(iconPath, iconPaint);
+                    break;
+                case "chevron-right":
+                    iconPath.reset();
+                    iconPath.moveTo(9, 5); iconPath.lineTo(16, 12); iconPath.lineTo(9, 19);
+                    canvas.drawPath(iconPath, iconPaint);
+                    break;
+                case "message-square":
+                    canvas.drawRoundRect(3, 4, 21, 18, 2.5f, 2.5f, iconPaint);
+                    iconPath.reset();
+                    iconPath.moveTo(7, 18); iconPath.lineTo(6, 22); iconPath.lineTo(12, 18);
+                    canvas.drawPath(iconPath, iconPaint);
+                    break;
+                case "paperclip":
+                    iconPath.reset();
+                    iconPath.moveTo(8, 12); iconPath.lineTo(15, 5);
+                    iconPath.cubicTo(19, 1, 24, 7, 20, 11);
+                    iconPath.lineTo(10, 21);
+                    iconPath.cubicTo(5, 26, 0, 20, 5, 15);
+                    iconPath.lineTo(15, 5);
+                    canvas.drawPath(iconPath, iconPaint);
+                    break;
+                case "puzzle":
+                    iconPath.reset();
+                    iconPath.moveTo(4, 4); iconPath.lineTo(9, 4);
+                    iconPath.cubicTo(8, 0, 15, 0, 14, 4);
+                    iconPath.lineTo(20, 4); iconPath.lineTo(20, 10);
+                    iconPath.cubicTo(24, 9, 24, 16, 20, 15);
+                    iconPath.lineTo(20, 20); iconPath.lineTo(14, 20);
+                    iconPath.cubicTo(15, 24, 8, 24, 9, 20);
+                    iconPath.lineTo(4, 20); iconPath.close();
+                    canvas.drawPath(iconPath, iconPaint);
+                    break;
+                case "x":
+                    canvas.drawLine(6, 6, 18, 18, iconPaint);
+                    canvas.drawLine(18, 6, 6, 18, iconPaint);
+                    break;
                 case "copy":
                     canvas.drawRoundRect(8, 8, 20, 21, 1.5f, 1.5f, iconPaint);
                     canvas.drawRoundRect(4, 3, 16, 16, 1.5f, 1.5f, iconPaint);
@@ -475,53 +520,83 @@ public class MainActivity extends Activity {
 
     private TextView addMessageView(boolean user, String value) {
         if (messages.getChildCount() == 1 && messages.getChildAt(0).getTag() == null) messages.removeAllViews();
+
+        // Match the approved web hierarchy: user bubble; assistant heading, plain text,
+        // and a separate action row. Keeping actions outside the text prevents clipping
+        // and accidental layout overlap after streamed replies grow.
         LinearLayout row = new LinearLayout(this);
         row.setGravity(user ? Gravity.END : Gravity.START);
-        row.setPadding(dp(1), dp(4), dp(1), dp(4));
-        TextView bubble = text(value, 14, uiTextColor(), false);
-        bubble.setLineSpacing(dp(3), 1f);
-        bubble.setPadding(dp(13), dp(10), dp(13), dp(10));
-        bubble.setMaxWidth((int) (getResources().getDisplayMetrics().widthPixels * 0.84f));
-        int bubbleBackground = user
-                ? themeUserBubbleColor(0xE51B3D31)
-                : themeAssistantBubbleColor(0xE5111B19);
-        int bubbleBorder = user
-                ? themeAccentColor(0xAA29C78D)
-                : themeAccentColor(0x5544A58A);
-        bubble.setBackground(roundRect(bubbleBackground, dp(14), bubbleBorder, dp(1)));
+        row.setPadding(dp(1), dp(8), dp(1), dp(8));
+
+        TextView message = text(value, 15, uiTextColor(), false);
+        message.setIncludeFontPadding(false);
+        message.setLineSpacing(dp(3), 1.2f);
 
         if (user) {
-            row.addView(bubble, new LinearLayout.LayoutParams(-2, -2));
+            message.setMaxWidth((int) (getResources().getDisplayMetrics().widthPixels * 0.82f));
+            message.setPadding(dp(14), dp(10), dp(14), dp(10));
+            android.graphics.drawable.GradientDrawable bubble =
+                    new android.graphics.drawable.GradientDrawable();
+            bubble.setColor(themeUserBubbleColor(0xE51B3D31));
+            bubble.setCornerRadii(new float[] {
+                    dp(16), dp(16), dp(16), dp(16),
+                    dp(6), dp(6), dp(16), dp(16)
+            });
+            bubble.setStroke(dp(1), themeAccentColor(0xAA29C78D));
+            message.setBackground(bubble);
+            row.addView(message, new LinearLayout.LayoutParams(-2, -2));
         } else {
             LinearLayout column = new LinearLayout(this);
             column.setOrientation(LinearLayout.VERTICAL);
             column.setGravity(Gravity.START);
-            column.addView(bubble, new LinearLayout.LayoutParams(-2, -2));
+
+            LinearLayout heading = new LinearLayout(this);
+            heading.setGravity(Gravity.CENTER_VERTICAL);
+            heading.setOrientation(LinearLayout.HORIZONTAL);
+            heading.setPadding(0, 0, 0, dp(5));
+            heading.addView(new LucideIconView("globe", null, 13f, accent),
+                    new LinearLayout.LayoutParams(dp(16), dp(16)));
+            TextView thinking = text("Thinking", 13, uiMutedColor(), false);
+            thinking.setIncludeFontPadding(false);
+            LinearLayout.LayoutParams thinkingLp = new LinearLayout.LayoutParams(-2, -2);
+            thinkingLp.leftMargin = dp(4);
+            heading.addView(thinking, thinkingLp);
+            LucideIconView chevron = new LucideIconView("chevron-right", null, 13f, uiMutedColor());
+            LinearLayout.LayoutParams chevronLp = new LinearLayout.LayoutParams(dp(16), dp(16));
+            chevronLp.leftMargin = dp(2);
+            heading.addView(chevron, chevronLp);
+            column.addView(heading, new LinearLayout.LayoutParams(-1, -2));
+
+            message.setPadding(0, 0, 0, 0);
+            message.setBackgroundColor(Color.TRANSPARENT);
+            message.setMaxWidth(Integer.MAX_VALUE);
+            column.addView(message, new LinearLayout.LayoutParams(-1, -2));
 
             LinearLayout actions = new LinearLayout(this);
             actions.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-            actions.setPadding(dp(1), dp(1), 0, 0);
-            addMessageAction(actions, "copy", "Copiar", () -> copyText(bubble.getText().toString()));
-            addMessageAction(actions, "volume-2", "Ouvir", () -> speakText(bubble.getText().toString()));
-            addMessageAction(actions, "download", "Baixar", () -> downloadText(bubble.getText().toString()));
-            addMessageAction(actions, "share-2", "Compartilhar", () -> shareText(bubble.getText().toString()));
-            column.addView(actions, new LinearLayout.LayoutParams(-2, dp(30)));
-            row.addView(column, new LinearLayout.LayoutParams(-2, -2));
+            LinearLayout.LayoutParams actionsLp = new LinearLayout.LayoutParams(-2, dp(36));
+            actionsLp.topMargin = dp(2);
+            column.addView(actions, actionsLp);
+            addMessageAction(actions, "copy", "Copiar", () -> copyText(message.getText().toString()));
+            addMessageAction(actions, "volume-2", "Ouvir", () -> speakText(message.getText().toString()));
+            addMessageAction(actions, "download", "Baixar", () -> downloadText(message.getText().toString()));
+            addMessageAction(actions, "share-2", "Compartilhar", () -> shareText(message.getText().toString()));
+            row.addView(column, new LinearLayout.LayoutParams(-1, -2));
         }
 
         messages.addView(row, new LinearLayout.LayoutParams(-1, -2));
         row.setTag("message");
         chatScroll.post(() -> chatScroll.fullScroll(View.FOCUS_DOWN));
-        return bubble;
+        return message;
     }
 
     private void addMessageAction(LinearLayout parent, String iconName, String description, Runnable action) {
-        // Keep reply actions muted like the web reference; each click reads the same bubble's final text.
-        LucideIconView button = new LucideIconView(iconName, description, 17f, uiMutedColor());
-        button.setBackground(roundRect(0x00000000, dp(7), 0, 0));
+        LucideIconView button = new LucideIconView(iconName, description, 15f, uiMutedColor());
+        button.setBackground(roundRect(0x00000000, dp(8), 0, 0));
         button.setFocusable(true);
+        button.setClickable(true);
         button.setOnClickListener(v -> action.run());
-        parent.addView(button, new LinearLayout.LayoutParams(dp(34), dp(30)));
+        parent.addView(button, new LinearLayout.LayoutParams(dp(36), dp(36)));
     }
 
     private void copyText(String value) {
@@ -836,20 +911,62 @@ public class MainActivity extends Activity {
     }
 
     private void showPlusMenu(View anchor) {
-        PopupMenu popup = new PopupMenu(this, anchor);
-        popup.getMenu().add("Imagem ou arquivo");
-        popup.getMenu().add("Plugins");
-        android.view.MenuItem webAccess = popup.getMenu().add("Acesso à Web");
-        webAccess.setCheckable(true);
-        webAccess.setChecked(isWebAccessEnabled());
-        popup.setOnMenuItemClickListener(item -> {
-            String label = item.getTitle().toString();
-            if (label.startsWith("Imagem")) pickFile();
-            else if (label.equals("Plugins")) showPlugins();
-            else toggleWebAccess();
-            return true;
+        LinearLayout menu = new LinearLayout(this);
+        menu.setOrientation(LinearLayout.VERTICAL);
+        menu.setPadding(dp(6), dp(6), dp(6), dp(6));
+        menu.setBackground(roundRect(uiPanelColor(), dp(12), themeAccentColor(0x5545A989), dp(1)));
+
+        android.widget.PopupWindow popup = new android.widget.PopupWindow(menu, dp(264), -2, true);
+        popup.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        popup.setOutsideTouchable(true);
+        popup.setElevation(dp(12));
+
+        addPopupMenuRow(menu, "paperclip", "Imagem ou arquivo", () -> {
+            popup.dismiss();
+            pickFile();
         });
-        popup.show();
+        addPopupMenuRow(menu, "puzzle", "Plugins", () -> {
+            popup.dismiss();
+            showPlugins();
+        });
+
+        LinearLayout webRow = new LinearLayout(this);
+        webRow.setGravity(Gravity.CENTER_VERTICAL);
+        webRow.setPadding(dp(10), dp(8), dp(10), dp(8));
+        webRow.addView(new LucideIconView("globe", null, 17f, accent),
+                new LinearLayout.LayoutParams(dp(28), dp(28)));
+        TextView webLabel = text("Acesso à Web", 14, uiTextColor(), false);
+        webRow.addView(webLabel, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView webState = text(isWebAccessEnabled() ? "Sim" : "Não", 12,
+                isWebAccessEnabled() ? accent : uiMutedColor(), false);
+        webRow.addView(webState, new LinearLayout.LayoutParams(-2, -2));
+        webRow.setBackground(roundRect(Color.TRANSPARENT, dp(8), 0, 0));
+        webRow.setOnClickListener(v -> {
+            popup.dismiss();
+            toggleWebAccess();
+        });
+        menu.addView(webRow, new LinearLayout.LayoutParams(-1, dp(44)));
+
+        menu.measure(
+                View.MeasureSpec.makeMeasureSpec(dp(264), View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        popup.setHeight(menu.getMeasuredHeight());
+        popup.showAsDropDown(anchor, 0, -menu.getMeasuredHeight() - anchor.getHeight());
+    }
+
+    private void addPopupMenuRow(LinearLayout parent, String iconName, String label, Runnable action) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(10), dp(8), dp(10), dp(8));
+        row.addView(new LucideIconView(iconName, null, 17f, accent),
+                new LinearLayout.LayoutParams(dp(28), dp(28)));
+        TextView caption = text(label, 14, uiTextColor(), false);
+        LinearLayout.LayoutParams captionLp = new LinearLayout.LayoutParams(0, -2, 1);
+        captionLp.leftMargin = dp(4);
+        row.addView(caption, captionLp);
+        row.setBackground(roundRect(Color.TRANSPARENT, dp(8), 0, 0));
+        row.setOnClickListener(v -> action.run());
+        parent.addView(row, new LinearLayout.LayoutParams(-1, dp(44)));
     }
 
     private void pickFile() {
@@ -929,47 +1046,172 @@ public class MainActivity extends Activity {
             toast("Aguarde a resposta atual antes de abrir o histórico.");
             return;
         }
+
         JSONArray saved = readHistoryIndex();
-        ArrayList<String> labels = new ArrayList<>();
-        ArrayList<String> ids = new ArrayList<>();
-        labels.add("Conversa atual");
-        ids.add("current");
+        android.app.Dialog dialog = new android.app.Dialog(this);
+        LinearLayout drawer = new LinearLayout(this);
+        drawer.setOrientation(LinearLayout.VERTICAL);
+        drawer.setPadding(0, 0, 0, dp(12));
+        android.graphics.drawable.GradientDrawable drawerBg = new android.graphics.drawable.GradientDrawable();
+        drawerBg.setColor(uiPanelColor());
+        drawerBg.setCornerRadii(new float[] {0f, 0f, dp(16), dp(16), dp(16), dp(16), 0f, 0f});
+        drawer.setBackground(drawerBg);
+
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(16), dp(12), dp(12), dp(12));
+        TextView title = text("CONVERSAS", 14, accent, true);
+        title.setLetterSpacing(0.18f);
+        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        LucideIconView close = new LucideIconView("x", "Fechar", 18f, accent);
+        header.addView(close, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        close.setOnClickListener(v -> dialog.dismiss());
+        drawer.addView(header);
+
+        View divider = new View(this);
+        divider.setBackgroundColor(themeAccentColor(0x3345A989));
+        drawer.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(false);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(12), dp(12), dp(12), dp(12));
+        scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+        drawer.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        LinearLayout newConversation = new LinearLayout(this);
+        newConversation.setGravity(Gravity.CENTER_VERTICAL);
+        newConversation.setPadding(dp(12), dp(10), dp(12), dp(10));
+        newConversation.setBackground(roundRect(uiPanelAltColor(), dp(12), themeAccentColor(0x8845A989), dp(1)));
+        newConversation.addView(new LucideIconView("plus", null, 17f, accent),
+                new LinearLayout.LayoutParams(dp(24), dp(24)));
+        TextView newLabel = text("Nova conversa", 14, accent, false);
+        LinearLayout.LayoutParams newLabelLp = new LinearLayout.LayoutParams(-1, -2);
+        newLabelLp.leftMargin = dp(8);
+        newConversation.addView(newLabel, newLabelLp);
+        content.addView(newConversation, new LinearLayout.LayoutParams(-1, -2));
+        newConversation.setOnClickListener(v -> {
+            dialog.dismiss();
+            archiveCurrentHistory();
+            brain.resetConversation();
+            transcript.clear();
+            activeHistoryId = "current";
+            prefs.edit().putString("active_history_id", "current")
+                    .putString("transcript", "[]").apply();
+            rebuildTranscriptViews();
+        });
+
+        TextView currentLabel = text("ATUAL", 10, uiMutedColor(), true);
+        currentLabel.setLetterSpacing(0.16f);
+        LinearLayout.LayoutParams currentLabelLp = new LinearLayout.LayoutParams(-1, -2);
+        currentLabelLp.topMargin = dp(18);
+        currentLabelLp.bottomMargin = dp(6);
+        content.addView(currentLabel, currentLabelLp);
+        addHistoryEntry(content, "Conversa atual", "Aberta agora", true, () -> dialog.dismiss(), null);
+
+        TextView savedLabel = text("SALVAS", 10, uiMutedColor(), true);
+        savedLabel.setLetterSpacing(0.16f);
+        LinearLayout.LayoutParams savedLabelLp = new LinearLayout.LayoutParams(-1, -2);
+        savedLabelLp.topMargin = dp(18);
+        savedLabelLp.bottomMargin = dp(6);
+        content.addView(savedLabel, savedLabelLp);
+
+        if (saved.length() == 0) {
+            TextView empty = text("Nenhuma conversa salva ainda.", 12, uiMutedColor(), false);
+            empty.setPadding(dp(10), dp(14), dp(10), dp(14));
+            content.addView(empty);
+        }
         for (int i = 0; i < saved.length(); i++) {
             JSONObject item = saved.optJSONObject(i);
             if (item == null) continue;
             String id = item.optString("id", "");
             if (id.isEmpty()) continue;
-            labels.add(item.optString("title", "Conversa salva"));
-            ids.add(id);
+            String label = item.optString("title", "Conversa salva");
+            final String selectedId = id;
+            addHistoryEntry(content, label, "Conversa salva", false, () -> {
+                dialog.dismiss();
+                archiveCurrentHistory();
+                String stored = prefs.getString("history:" + selectedId, "[]");
+                transcript.clear();
+                decodeTranscript(stored, transcript);
+                activeHistoryId = selectedId;
+                brain.resetConversation();
+                prefs.edit().putString("active_history_id", activeHistoryId)
+                        .putString("transcript", encodeTranscript()).apply();
+                saveTranscript();
+                rebuildTranscriptViews();
+            }, () -> {
+                JSONArray latest = readHistoryIndex();
+                JSONArray next = new JSONArray();
+                for (int j = 0; j < latest.length(); j++) {
+                    JSONObject entry = latest.optJSONObject(j);
+                    if (entry == null || selectedId.equals(entry.optString("id", ""))) continue;
+                    next.put(entry);
+                }
+                prefs.edit().putString("history_index", next.toString())
+                        .remove("history:" + selectedId).apply();
+                dialog.dismiss();
+                toast("Conversa excluída.");
+            });
         }
-        labels.add("Nova conversa");
-        ids.add("new");
 
-        new AlertDialog.Builder(this).setTitle("Histórico de conversas")
-                .setItems(labels.toArray(new String[0]), (d, which) -> {
-                    String selected = ids.get(which);
-                    if ("current".equals(selected)) return;
-                    if ("new".equals(selected)) {
-                        archiveCurrentHistory();
-                        brain.resetConversation();
-                        transcript.clear();
-                        activeHistoryId = "current";
-                        prefs.edit().putString("active_history_id", "current")
-                                .putString("transcript", "[]").apply();
-                        rebuildTranscriptViews();
-                        return;
-                    }
-                    archiveCurrentHistory();
-                    String stored = prefs.getString("history:" + selected, "[]");
-                    transcript.clear();
-                    decodeTranscript(stored, transcript);
-                    activeHistoryId = selected;
-                    brain.resetConversation();
-                    prefs.edit().putString("active_history_id", activeHistoryId)
-                            .putString("transcript", encodeTranscript()).apply();
-                    saveTranscript();
-                    rebuildTranscriptViews();
-                }).setNegativeButton("Fechar", null).show();
+        TextView footer = text("Fechar", 14, accent, false);
+        footer.setGravity(Gravity.CENTER);
+        footer.setBackground(roundRect(uiPanelAltColor(), dp(12), themeAccentColor(0x6645A989), dp(1)));
+        LinearLayout.LayoutParams footerLp = new LinearLayout.LayoutParams(-1, dp(42));
+        footerLp.setMargins(dp(12), dp(4), dp(12), 0);
+        drawer.addView(footer, footerLp);
+        footer.setOnClickListener(v -> dialog.dismiss());
+
+        dialog.setContentView(drawer);
+        dialog.setCancelable(true);
+        dialog.show();
+        android.view.Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawableResource(android.R.color.transparent);
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            WindowManager.LayoutParams params = window.getAttributes();
+            params.gravity = Gravity.START;
+            params.width = Math.min((int) (getResources().getDisplayMetrics().widthPixels * 0.84f), dp(350));
+            params.height = WindowManager.LayoutParams.MATCH_PARENT;
+            params.dimAmount = 0.70f;
+            window.setAttributes(params);
+            window.setLayout(params.width, params.height);
+        }
+    }
+
+    private void addHistoryEntry(LinearLayout parent, String title, String detail,
+                                 boolean selected, Runnable onClick, Runnable onDelete) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(10), dp(9), dp(6), dp(9));
+        row.setBackground(roundRect(selected ? themeAccentColor(0x2238E6BC) : Color.TRANSPARENT,
+                dp(9), selected ? themeAccentColor(0x6645A989) : 0, selected ? dp(1) : 0));
+        row.addView(new LucideIconView("message-square", null, 16f, accent),
+                new LinearLayout.LayoutParams(dp(24), dp(24)));
+        LinearLayout labels = new LinearLayout(this);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        TextView name = text(title, 13, uiTextColor(), false);
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        labels.addView(name);
+        TextView sub = text(detail, 10, uiMutedColor(), false);
+        LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(-1, -2);
+        subLp.topMargin = dp(2);
+        labels.addView(sub, subLp);
+        LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(0, -2, 1);
+        labelsLp.leftMargin = dp(8);
+        row.addView(labels, labelsLp);
+        if (onDelete != null) {
+            LucideIconView delete = new LucideIconView("x", "Excluir conversa", 15f, uiMutedColor());
+            row.addView(delete, new LinearLayout.LayoutParams(dp(30), dp(30)));
+            delete.setOnClickListener(v -> onDelete.run());
+        }
+        row.setOnClickListener(v -> onClick.run());
+        LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(-1, -2);
+        rowLp.topMargin = dp(4);
+        parent.addView(row, rowLp);
     }
 
     private void rebuildTranscriptViews() {
@@ -1113,17 +1355,20 @@ public class MainActivity extends Activity {
         LinearLayout item = new LinearLayout(this);
         item.setOrientation(LinearLayout.VERTICAL);
         item.setGravity(Gravity.CENTER);
-        item.setPadding(0, dp(3), 0, dp(2));
+        item.setPadding(0, dp(6), 0, dp(6));
         item.setContentDescription(label);
         item.setBackground(roundRect(0x00000000, dp(8), 0, 0));
 
-        View symbol = new LucideIconView(label, null);
-        item.addView(symbol, new LinearLayout.LayoutParams(-1, dp(25)));
+        View symbol = new LucideIconView(label, null, 22f,
+                "AI".equals(label) ? accent : themeAccentColor(0xCC38E6BC));
+        item.addView(symbol, new LinearLayout.LayoutParams(-1, dp(22)));
 
-        TextView caption = text(label, 12, "AI".equals(label) ? accent : uiMutedColor(), false);
+        TextView caption = text(label, 11, "AI".equals(label) ? accent : uiMutedColor(), false);
         caption.setGravity(Gravity.CENTER);
         caption.setIncludeFontPadding(false);
-        item.addView(caption, new LinearLayout.LayoutParams(-1, dp(15)));
+        LinearLayout.LayoutParams captionLp = new LinearLayout.LayoutParams(-1, dp(14));
+        captionLp.topMargin = dp(4);
+        item.addView(caption, captionLp);
 
         item.setOnClickListener(v -> action.run());
         parent.addView(item, new LinearLayout.LayoutParams(0, -1, 1));
