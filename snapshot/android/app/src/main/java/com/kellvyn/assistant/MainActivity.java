@@ -24,6 +24,7 @@ import android.text.InputType;
 import android.text.Spannable;
 import android.text.SpannableString;
 import android.text.style.ForegroundColorSpan;
+import android.view.Choreographer;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
@@ -2906,10 +2907,15 @@ public class MainActivity extends Activity {
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint leafPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint flashPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Handler h = new Handler();
-        private final Runnable frame = this::invalidate;
-        // Match the web canvas density for a 444dp x 913dp Poco F6 viewport:
-        // about one streak per 6,000 square dp, capped here at the same mobile-scale count.
+        private final Choreographer.FrameCallback frameCallback = new Choreographer.FrameCallback() {
+            @Override public void doFrame(long frameTimeNanos) {
+                frameScheduled = false;
+                if (!running || activeEffects.isEmpty()) return;
+                invalidate();
+                scheduleNextFrame();
+            }
+        };
+        // 68 rain streaks match the web canvas density at the 444dp Poco F6 viewport.
         private final int count = 68;
         private final int particleCount = 42;
         private final float[] x = new float[count], y = new float[count], speed = new float[count], len = new float[count], opacity = new float[count];
@@ -2918,10 +2924,13 @@ public class MainActivity extends Activity {
         private final float[] boltX = new float[32], boltY = new float[32];
         private int boltPointCount = 0;
         private Set<String> activeEffects = new HashSet<>();
-        private boolean initialized = false, running = false;
+        private boolean initialized = false, running = false, frameScheduled = false;
         private float flashIntensity = 0f;
         private long nextLightningAt = 0L;
         private long lastLightningFrameAt = 0L;
+        private long lastDrawNanos = 0L;
+        private long fpsWindowStartNanos = 0L;
+        private int fpsWindowFrames = 0;
 
         RainView() {
             super(MainActivity.this);
@@ -2929,6 +2938,13 @@ public class MainActivity extends Activity {
             activeEffects = renderEffectSet();
             if (activeEffects.contains("raios")) {
                 nextLightningAt = System.currentTimeMillis() + 2000L + (long)(Math.random() * 4000L);
+            }
+        }
+
+        private void scheduleNextFrame() {
+            if (running && !activeEffects.isEmpty() && !frameScheduled) {
+                frameScheduled = true;
+                Choreographer.getInstance().postFrameCallback(frameCallback);
             }
         }
 
@@ -2946,22 +2962,29 @@ public class MainActivity extends Activity {
                 flashIntensity = 0f;
                 lastLightningFrameAt = 0L;
             }
+            if (activeEffects.isEmpty() && frameScheduled) {
+                Choreographer.getInstance().removeFrameCallback(frameCallback);
+                frameScheduled = false;
+                lastDrawNanos = 0L;
+            }
             invalidate();
+            scheduleNextFrame();
         }
 
         private void init() {
             for (int i=0;i<count;i++) {
                 x[i] = (float)Math.random()*Math.max(1,getWidth());
                 y[i] = (float)Math.random()*Math.max(1,getHeight());
-                // The web rain travels at roughly 140–520 CSS px/s, with 18–68px trails.
-                // Android dp values keep the same visual size on a high-density Poco display.
-                speed[i] = dp(6) + (float)Math.random()*dp(17);
+                // The web component moves rain at 140–520 CSS px per second.
+                // Store physical pixels/second here and integrate with measured frame delta.
+                speed[i] = dp(140f) + (float)Math.random()*dp(380f);
                 len[i] = dp(18) + (float)Math.random()*dp(50);
                 opacity[i] = 0.15f + (float)Math.random()*0.40f;
             }
             for (int i=0;i<particleCount;i++) {
                 px[i] = (float)Math.random()*Math.max(1,getWidth());
                 py[i] = (float)Math.random()*Math.max(1,getHeight());
+                // Keep the other particle effects' previous 45ms movement envelope.
                 pspeed[i] = dp(1) + (float)Math.random()*dp(2.4f);
                 psize[i] = dp(1) + (float)Math.random()*dp(2.3f);
                 prot[i] = (float)Math.random()*360f;
@@ -2970,11 +2993,11 @@ public class MainActivity extends Activity {
             initialized = true;
         }
 
-        private void drawRain(Canvas c) {
+        private void drawRain(Canvas c, float dt) {
             p.setStrokeWidth(dp(1.25f));
             for (int i=0;i<count;i++) {
-                // A three-step pale blue trail approximates DigitalRain's transparent-to-solid sprite.
-                // The previous fixed 11–23% alpha made most streaks almost invisible on the dark panel.
+                // This is still the original native three-segment trail; timed video will
+                // quantify its cadence before any separate sprite/gradient rendering change.
                 int alpha = Math.round(opacity[i] * 255f);
                 float mid = y[i] + len[i] * 0.34f;
                 float lower = y[i] + len[i] * 0.72f;
@@ -2985,7 +3008,7 @@ public class MainActivity extends Activity {
                 p.setColor(Color.argb(alpha, 220, 235, 248));
                 c.drawLine(x[i] - dp(0.70f), lower, x[i] - dp(1.0f), y[i] + len[i], p);
                 if (running) {
-                    y[i] += speed[i];
+                    y[i] += speed[i] * dt;
                     if (y[i] > getHeight()) {
                         y[i] = -len[i];
                         x[i] = (float)Math.random()*getWidth();
@@ -2994,13 +3017,14 @@ public class MainActivity extends Activity {
             }
         }
 
-        private void drawSnow(Canvas c) {
+        private void drawSnow(Canvas c, float dt, float elapsedSeconds) {
             p.setColor(0xBBDDEEFF);
+            float referenceFrameScale = dt / 0.045f;
             for (int i=0;i<particleCount;i++) {
                 c.drawCircle(px[i], py[i], psize[i], p);
                 if (running) {
-                    py[i] += pspeed[i];
-                    px[i] += (float)Math.sin((py[i] + i) * 0.015f) * dp(0.4f);
+                    py[i] += pspeed[i] * referenceFrameScale;
+                    px[i] += (float)Math.sin((py[i] + i) * 0.015f) * dp(0.4f) * referenceFrameScale;
                     if (py[i] > getHeight() + psize[i]) {
                         py[i] = -psize[i];
                         px[i] = (float)Math.random()*getWidth();
@@ -3009,7 +3033,8 @@ public class MainActivity extends Activity {
             }
         }
 
-        private void drawLeaves(Canvas c) {
+        private void drawLeaves(Canvas c, float dt, float elapsedSeconds) {
+            float referenceFrameScale = dt / 0.045f;
             for (int i=0;i<particleCount/2;i++) {
                 c.save();
                 c.rotate(prot[i], px[i], py[i]);
@@ -3017,9 +3042,9 @@ public class MainActivity extends Activity {
                 c.drawOval(px[i]-psize[i]*2.5f, py[i]-psize[i], px[i]+psize[i]*2.5f, py[i]+psize[i], leafPaint);
                 c.restore();
                 if (running) {
-                    py[i] += pspeed[i] * 1.15f;
-                    px[i] += (float)Math.sin(py[i] * 0.012f) * dp(0.8f);
-                    prot[i] += protSpeed[i];
+                    py[i] += pspeed[i] * 1.15f * referenceFrameScale;
+                    px[i] += (float)Math.sin(py[i] * 0.012f) * dp(0.8f) * referenceFrameScale;
+                    prot[i] += protSpeed[i] * referenceFrameScale;
                     if (py[i] > getHeight() + dp(12)) {
                         py[i] = -dp(12);
                         px[i] = (float)Math.random()*getWidth();
@@ -3082,17 +3107,52 @@ public class MainActivity extends Activity {
             }
         }
 
-        void start() { if (!running) { running = true; h.post(frame); } }
-        void stop() { running = false; h.removeCallbacks(frame); }
+        void start() {
+            if (!running) {
+                running = true;
+                lastDrawNanos = 0L;
+                fpsWindowStartNanos = 0L;
+                fpsWindowFrames = 0;
+                scheduleNextFrame();
+            }
+        }
+
+        void stop() {
+            running = false;
+            if (frameScheduled) {
+                Choreographer.getInstance().removeFrameCallback(frameCallback);
+                frameScheduled = false;
+            }
+            lastDrawNanos = 0L;
+        }
+
         @Override protected void onDraw(Canvas c) {
             super.onDraw(c);
             if (getWidth() == 0 || getHeight() == 0) return;
             if (!initialized) init();
-            if (activeEffects.contains("chuva")) drawRain(c);
-            if (activeEffects.contains("neve")) drawSnow(c);
-            if (activeEffects.contains("folhas")) drawLeaves(c);
+
+            long nowNanos = System.nanoTime();
+            float dt = lastDrawNanos == 0L
+                    ? (1f / 60f)
+                    : Math.min(0.10f, Math.max(0.001f, (nowNanos - lastDrawNanos) / 1_000_000_000f));
+            lastDrawNanos = nowNanos;
+            float elapsedSeconds = nowNanos / 1_000_000_000f;
+
+            fpsWindowFrames++;
+            if (fpsWindowStartNanos == 0L) fpsWindowStartNanos = nowNanos;
+            long fpsElapsed = nowNanos - fpsWindowStartNanos;
+            if (fpsElapsed >= 1_000_000_000L) {
+                float measuredFps = fpsWindowFrames * 1_000_000_000f / fpsElapsed;
+                android.util.Log.i("KellvynRainView", "renderFps=" + Math.round(measuredFps)
+                        + " frameDeltaMs=" + Math.round(dt * 1000f));
+                fpsWindowFrames = 0;
+                fpsWindowStartNanos = nowNanos;
+            }
+
+            if (activeEffects.contains("chuva")) drawRain(c, dt);
+            if (activeEffects.contains("neve")) drawSnow(c, dt, elapsedSeconds);
+            if (activeEffects.contains("folhas")) drawLeaves(c, dt, elapsedSeconds);
             if (activeEffects.contains("raios")) drawLightning(c);
-            if (running && !activeEffects.isEmpty()) h.postDelayed(frame, 45);
         }
     }
 }
