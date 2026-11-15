@@ -39,6 +39,15 @@ type OpfsFileHandle = {
   createWritable: () => Promise<WritableStream<Uint8Array>>;
 };
 
+type IncrementalSha256 = {
+  update: (chunk: Uint8Array) => IncrementalSha256;
+  digest: () => Uint8Array;
+};
+
+type Sha256Module = {
+  sha256: { create: () => IncrementalSha256 };
+};
+
 type OpfsDirectoryHandle = {
   getFileHandle: (name: string, options?: { create?: boolean }) => Promise<OpfsFileHandle>;
 };
@@ -52,11 +61,16 @@ type StorageWithOpfs = {
 const MODEL_URL =
   "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/41c5569623a7c189d6eec3e5225260c58cedbce7/gemma-4-E2B-it-gpu.litertlm";
 const SDK_URL = "https://cdn.jsdelivr.net/npm/@litert-lm/core@0.18.0/+esm";
+const SHA256_URL = "https://cdn.jsdelivr.net/npm/@noble/hashes@2.0.0/sha2.js/+esm";
 const MODEL_FILE_NAME = "kellvyn-gemma-4-e2b-gpu.litertlm";
+const MODEL_HASH_FILE_NAME = MODEL_FILE_NAME + ".sha256";
 const EXPECTED_MODEL_BYTES = 2_008_432_640;
+const EXPECTED_MODEL_SHA256 = "a53a59001894c58e6bdb5b9b227709f91a2e3e556baa7d85acf9c55402ba5cf5";
+const STORAGE_MARGIN_BYTES = 64 * 1024 * 1024;
 
 let enginePromise: Promise<LocalEngine> | null = null;
 let sdkPromise: Promise<EngineModule> | null = null;
+let sha256Promise: Promise<Sha256Module> | null = null;
 type CachedConversation = { instance: LocalConversation; strongProtection: boolean };
 const conversations = new Map<string, CachedConversation>();
 
@@ -86,25 +100,75 @@ function requireBrowserSupport() {
   }
 }
 
+async function getSha256Module(): Promise<Sha256Module> {
+  if (!sha256Promise) {
+    const moduleUrl: string = SHA256_URL;
+    sha256Promise = import(/* @vite-ignore */ moduleUrl) as Promise<Sha256Module>;
+  }
+  try {
+    return await sha256Promise;
+  } catch (error) {
+    sha256Promise = null;
+    throw error;
+  }
+}
+
+function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function hashFile(file: File): Promise<string> {
+  const { sha256 } = await getSha256Module();
+  const hasher = sha256.create();
+  const reader = file.stream().getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) hasher.update(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return toHex(hasher.digest());
+}
+
+async function saveHashMarker(directory: OpfsDirectoryHandle, digest: string): Promise<void> {
+  const marker = await directory.getFileHandle(MODEL_HASH_FILE_NAME, { create: true });
+  const writable = await marker.createWritable();
+  await new Blob([digest], { type: "text/plain" }).stream().pipeTo(writable);
+}
+
 async function getModelSource(): Promise<string | File> {
   const storage = navigator.storage as unknown as StorageWithOpfs;
   if (!storage.getDirectory) {
-    // Fallback supported by the SDK, but the browser may need to fetch the model again later.
-    return MODEL_URL;
+    throw new Error("Este navegador não oferece armazenamento local verificável para preparar a IA. Abra o Kellvyn no Chrome atualizado.");
   }
 
   const directory = await storage.getDirectory();
   const handle = await directory.getFileHandle(MODEL_FILE_NAME, { create: true });
+  const hashHandle = await directory.getFileHandle(MODEL_HASH_FILE_NAME, { create: true });
   const cached = await handle.getFile();
-  if (cached.size === EXPECTED_MODEL_BYTES) return cached;
+
+  if (cached.size === EXPECTED_MODEL_BYTES) {
+    const marker = await (await hashHandle.getFile()).text();
+    if (marker.trim() === EXPECTED_MODEL_SHA256) return cached;
+
+    // Verify an existing cache before trusting it; save a marker to avoid rehashing on every launch.
+    const cachedHash = await hashFile(cached);
+    if (cachedHash === EXPECTED_MODEL_SHA256) {
+      await saveHashMarker(directory, cachedHash);
+      return cached;
+    }
+  }
 
   const estimate = await storage.estimate?.();
   if (
     estimate?.quota &&
     estimate.usage !== undefined &&
-    estimate.quota - estimate.usage < EXPECTED_MODEL_BYTES
+    estimate.quota - estimate.usage < EXPECTED_MODEL_BYTES + STORAGE_MARGIN_BYTES
   ) {
-    throw new Error("Não há espaço de armazenamento do navegador suficiente para preparar o modelo local de aproximadamente 2,6 GB.");
+    throw new Error("Não há espaço livre suficiente no armazenamento local para preparar o modelo de IA de aproximadamente 2,01 GB.");
   }
 
   await storage.persist?.();
@@ -114,20 +178,40 @@ async function getModelSource(): Promise<string | File> {
   }
 
   const expectedSize = Number(response.headers.get("content-length") ?? "0");
+  if (expectedSize > 0 && expectedSize !== EXPECTED_MODEL_BYTES) {
+    throw new Error("O servidor enviou um arquivo de modelo com tamanho diferente da revisão aprovada. O download foi interrompido.");
+  }
+
+  const { sha256 } = await getSha256Module();
+  const hasher = sha256.create();
+  let transferredBytes = 0;
+  const verifyStream = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      transferredBytes += chunk.byteLength;
+      if (transferredBytes > EXPECTED_MODEL_BYTES) {
+        throw new Error("O arquivo do modelo excedeu o tamanho esperado; download interrompido.");
+      }
+      hasher.update(chunk);
+      controller.enqueue(chunk);
+    },
+  });
+
   const writable = await handle.createWritable();
-  await response.body.pipeTo(writable);
+  await response.body.pipeThrough(verifyStream).pipeTo(writable);
 
   const downloaded = await handle.getFile();
-  if (
-    downloaded.size < MIN_COMPLETE_MODEL_BYTES ||
-    (expectedSize > 0 && downloaded.size !== expectedSize)
-  ) {
+  if (downloaded.size !== EXPECTED_MODEL_BYTES || transferredBytes !== EXPECTED_MODEL_BYTES) {
     throw new Error("A transferência do modelo ficou incompleta. Envie a mensagem novamente para tentar de novo.");
   }
 
+  const downloadedHash = toHex(hasher.digest());
+  if (downloadedHash !== EXPECTED_MODEL_SHA256) {
+    throw new Error("A verificação SHA-256 do modelo local falhou. O arquivo não será carregado; tente baixar novamente.");
+  }
+
+  await saveHashMarker(directory, downloadedHash);
   return downloaded;
 }
-
 async function getEngine(): Promise<LocalEngine> {
   if (enginePromise) return enginePromise;
 
