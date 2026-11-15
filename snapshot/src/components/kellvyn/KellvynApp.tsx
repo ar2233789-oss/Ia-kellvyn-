@@ -218,7 +218,7 @@ export function KellvynApp() {
           ...c,
           messages: c.messages.map((m) => m.id === replyId ? { ...m, text: partial, error: false } : m),
         }));
-      });
+      }, settings.strongProtection);
       updateConvs((p) => p.map((c) => c.id !== cid ? c : {
         ...c,
         messages: c.messages.map((m) => m.id === replyId ? { ...m, text: answer, error: false } : m),
