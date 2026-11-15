@@ -135,8 +135,33 @@ def capture_reference_state(state: str) -> Path:
     time.sleep(0.8)
     screenshot = capture(f"webview-{state}", WEB)
     if state == "effects-main":
-        # Record the 45-second live WebView effect sequence after enabling rain + lightning.
-        record_animation_video("webview-rain-lightning", ANIMATION_DIR / "webview")
+        # Record real movement, then preserve the WebView requestAnimationFrame telemetry.
+        web_video_dir = ANIMATION_DIR / "webview"
+        record_animation_video("webview-rain-lightning", web_video_dir)
+        web_log = adb("logcat", "-d", "-s", "KellvynWebViewLab:I", timeout=45, check=False)
+        (web_video_dir / "webview-animation-logcat.txt").write_text(web_log, encoding="utf-8")
+        raf_metrics = []
+        for line in web_log.splitlines():
+            match = re.search(r"RAF_METRIC (\\{.*\\})", line)
+            if match:
+                try:
+                    raf_metrics.append(json.loads(match.group(1)))
+                except json.JSONDecodeError:
+                    pass
+        fps_values = [float(item["fps"]) for item in raf_metrics if isinstance(item.get("fps"), (int, float))]
+        runtime_metrics = {
+            "source": "requestAnimationFrame callback counter in frozen WebView reference",
+            "samples": raf_metrics,
+            "sampleCount": len(fps_values),
+            "meanFps": round(float(np.mean(fps_values)), 3) if fps_values else None,
+            "medianFps": round(float(np.median(fps_values)), 3) if fps_values else None,
+            "p10Fps": round(float(np.percentile(fps_values, 10)), 3) if fps_values else None,
+            "p90Fps": round(float(np.percentile(fps_values, 90)), 3) if fps_values else None,
+        }
+        (web_video_dir / "webview-runtime-metrics.json").write_text(
+            json.dumps(runtime_metrics, indent=2) + "\\n", encoding="utf-8"
+        )
+        print("WEBVIEW_RUNTIME_METRICS " + json.dumps(runtime_metrics), flush=True)
     return screenshot
 
 def screenshot_array(path: Path) -> np.ndarray:
@@ -324,6 +349,7 @@ def capture_native_states() -> dict:
     adb("install", "-r", "artifacts/apk/app-debug.apk", timeout=180)
     adb("shell", "pm", "clear", APP_PACKAGE, timeout=45)
     adb("shell", "am", "force-stop", APP_PACKAGE, timeout=30)
+    adb("logcat", "-c", timeout=15)
     adb("shell", "am", "start", "-n", APP_COMPONENT, timeout=45)
     time.sleep(8)
 
@@ -377,10 +403,29 @@ def capture_native_states() -> dict:
         adb("shell", "dumpsys", "meminfo", APP_PACKAGE, timeout=45),
         encoding="utf-8",
     )
-    (NATIVE / "native-logcat.txt").write_text(
-        adb("logcat", "-d", "-t", "2500", timeout=45),
-        encoding="utf-8",
+    native_log = adb("logcat", "-d", "-t", "2500", timeout=45)
+    (NATIVE / "native-logcat.txt").write_text(native_log, encoding="utf-8")
+    native_render_log = adb("logcat", "-d", "-s", "KellvynRainView:I", timeout=45, check=False)
+    animation_dir = ANIMATION_DIR / "native"
+    (animation_dir / "native-animation-logcat.txt").write_text(native_render_log, encoding="utf-8")
+    native_samples = [
+        {"fps": int(fps), "frameDeltaMs": int(delta)}
+        for fps, delta in re.findall(r"renderFps=(\\d+)\\s+frameDeltaMs=(\\d+)", native_render_log)
+    ]
+    fps_values = [item["fps"] for item in native_samples]
+    native_runtime_metrics = {
+        "source": "RainView Choreographer onDraw frame counter",
+        "samples": native_samples,
+        "sampleCount": len(fps_values),
+        "meanFps": round(float(np.mean(fps_values)), 3) if fps_values else None,
+        "medianFps": round(float(np.median(fps_values)), 3) if fps_values else None,
+        "p10Fps": round(float(np.percentile(fps_values, 10)), 3) if fps_values else None,
+        "p90Fps": round(float(np.percentile(fps_values, 90)), 3) if fps_values else None,
+    }
+    (animation_dir / "native-runtime-metrics.json").write_text(
+        json.dumps(native_runtime_metrics, indent=2) + "\\n", encoding="utf-8"
     )
+    print("NATIVE_RUNTIME_METRICS " + json.dumps(native_runtime_metrics), flush=True)
     return {
         "goldPalettePreference": gold_pref,
         "rainLightningPreference": effects_pref,
@@ -454,6 +499,10 @@ def main() -> int:
         "webViewStates": ["main", "settings", "gold-settings", "gold-main", "effects-settings", "effects-main"],
         "nativeStates": ["main", "settings", "gold-settings", "main after gold palette", "effects-settings", "effects-main"],
         "nativeChecks": native_result,
+        "animationRuntimeMetrics": {
+            "webView": json.loads((ANIMATION_DIR / "webview" / "webview-runtime-metrics.json").read_text(encoding="utf-8")),
+            "native": json.loads((ANIMATION_DIR / "native" / "native-runtime-metrics.json").read_text(encoding="utf-8")),
+        },
         "environment": env,
         "note": "This AVD is a Poco F6 virtual profile, not a physical Poco F6/HyperOS device. The WebView reference is test-only and is not part of the Kellvyn release APK.",
     }
