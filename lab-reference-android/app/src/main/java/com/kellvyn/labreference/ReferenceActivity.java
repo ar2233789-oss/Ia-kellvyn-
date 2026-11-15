@@ -123,6 +123,7 @@ public final class ReferenceActivity extends Activity {
                 "const waitFor=async predicate=>{const deadline=Date.now()+10000;while(Date.now()<deadline){const value=predicate();if(value)return value;await new Promise(r=>setTimeout(r,150));}return null;};" +
                 "const waitForRenderedPanel=async()=>await waitFor(()=>{const title=Array.from(document.querySelectorAll('h2')).find(h=>h.innerText.trim().toUpperCase()==='CONFIGURAÇÕES DO KELLVYN');if(!title)return false;const panel=title.closest('section');if(!panel)return false;const rect=panel.getBoundingClientRect();const style=getComputedStyle(panel);let animating=false;try{animating=panel.getAnimations({subtree:true}).some(a=>a.playState==='running');}catch(e){animating=panel.getAnimations().some(a=>a.playState==='running');}return rect.width>0&&rect.height>0&&rect.top<innerHeight&&rect.bottom>0&&style.display!=='none'&&style.visibility!=='hidden'&&parseFloat(style.opacity||'1')>=0.95&&!animating;});" +
                 "const done=()=>report(true,'');" +
+                "const startRafMonitor=()=>{let frames=0,last=performance.now();const tick=now=>{frames++;const elapsed=now-last;if(elapsed>=1000){const canvas=document.querySelector('canvas');const rect=canvas?canvas.getBoundingClientRect():null;window.KellvynLab.console('RAF_METRIC '+JSON.stringify({fps:Number((frames*1000/elapsed).toFixed(2)),timeSeconds:Number((now/1000).toFixed(2)),canvas:!!canvas,canvasWidth:rect?Math.round(rect.width):0,canvasHeight:rect?Math.round(rect.height):0,visibility:document.visibilityState}));frames=0;last=now;}requestAnimationFrame(tick);};requestAnimationFrame(tick);};" +
                 // Use the actual React callback in the lab WebView. The HTMLElement.click()
                 // automation did not reliably reach React's delegated handler in headless AVD.
                 "const invokeReactClick=(el)=>{const key=Object.keys(el).find(k=>k.startsWith('__reactProps$'));if(key&&typeof el[key].onClick==='function'){el[key].onClick({currentTarget:el,target:el,preventDefault(){},stopPropagation(){}});return 'react';}el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));return 'dom';};" +
@@ -189,6 +190,7 @@ public final class ReferenceActivity extends Activity {
                 "const closed=await waitFor(()=>!Array.from(document.querySelectorAll('h2')).some(h=>h.innerText.trim().toUpperCase()==='CONFIGURAÇÕES DO KELLVYN'));" +
                 "if(!closed){report(false,'settings panel did not close after enabling lightning');return 'effects-panel-stuck';}" +
                 "await new Promise(resolve=>setTimeout(resolve,1200));" +
+                "startRafMonitor();" +
                 "}" +
                 "done();return state+'-ready';" +
                 "}" +
