@@ -129,7 +129,7 @@ public final class ReferenceActivity extends Activity {
                 "if(state==='gold-settings'||state==='gold-main'){" +
                 "const gold=clickByText('Preto e Dourado');" +
                 "if(!gold){report(false,'gold palette button missing');return;}" +
-                "gold.click();" +
+                "gold.scrollIntoView({block:'center'});gold.click();" +
                 "setTimeout(()=>{" +
                 "if(state==='gold-main'){" +
                 "const close=document.querySelector('button[aria-label=\"Fechar\"]');" +
@@ -137,6 +137,13 @@ public final class ReferenceActivity extends Activity {
                 "}" +
                 "setTimeout(done,700);" +
                 "},500);" +
+                "return;" +
+                "}" +
+                "if(state==='effects'){" +
+                "const lightning=clickByText('Raios');" +
+                "if(!lightning){report(false,'lightning effect button missing');return;}" +
+                "lightning.scrollIntoView({block:'center'});" +
+                "setTimeout(()=>{lightning.click();const close=document.querySelector('button[aria-label=\\\"Fechar\\\"]');if(close)close.click();setTimeout(done,700);},350);" +
                 "return;" +
                 "}" +
                 "report(false,'unsupported lab state '+state);" +
