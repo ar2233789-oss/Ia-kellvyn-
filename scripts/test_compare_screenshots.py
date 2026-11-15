@@ -36,6 +36,15 @@ class ComparatorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no resizing allowed"):
             MOD.compare_pair(self.ref, self.candidate, self.root / "out", "wrong-size")
 
+    def test_explicit_system_bar_crop_aligns_without_resizing(self):
+        Image.new("RGB", (11, 10), (10, 20, 30)).save(self.candidate)
+        r = MOD.compare_pair(
+            self.ref, self.candidate, self.root / "out", "cropped",
+            candidate_crop=(1, 1, 0, 1),
+        )
+        self.assertEqual(r["changedPixelsPercent"], 0)
+        self.assertEqual(r["dimensions"], [10, 8])
+
     def test_sequence_requires_identical_frame_names(self):
         left, right = self.root / "left", self.root / "right"
         left.mkdir(); right.mkdir()
