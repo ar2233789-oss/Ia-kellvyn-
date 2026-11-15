@@ -184,7 +184,6 @@ def ui_point(label: str) -> tuple[int, int] | None:
             target = parents.get(target)
         if target is None:
             target = node
-        match = ET.re.sub if False else None
         bounds = target.attrib.get("bounds", "")
         import re
         match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
@@ -209,6 +208,13 @@ def wait_ui_point(label: str, timeout: int = 25) -> tuple[int, int] | None:
 
 def tap_ui_label(label: str, *, fallback: tuple[int, int] | None = None, timeout: int = 25) -> None:
     point = wait_ui_point(label, timeout=timeout)
+    if point is None:
+        # Reveal lower rows in long settings panels before using any coordinate fallback.
+        for _ in range(3):
+            adb("shell", "input", "swipe", "610", "2280", "610", "1450", "450", timeout=20)
+            point = wait_ui_point(label, timeout=8)
+            if point is not None:
+                break
     if point is None:
         if fallback is None:
             raise RuntimeError(f"Accessibility control not found: {label!r}")
