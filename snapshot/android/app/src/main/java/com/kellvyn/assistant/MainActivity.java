@@ -3081,7 +3081,7 @@ public class MainActivity extends Activity {
             if (flashIntensity > 0f) {
                 float frameSeconds = lastLightningFrameAt == 0L
                         ? 0.045f
-                        : Math.min(0.10f, Math.max(0.0f, (now - lastLightningFrameAt) / 1000f));
+                        : Math.min(1f / 30f, Math.max(0.0f, (now - lastLightningFrameAt) / 1000f));
                 lastLightningFrameAt = now;
 
                 // Match the web flash: 12% screen wash, 85% bolt opacity and 14px glow.
@@ -3134,7 +3134,7 @@ public class MainActivity extends Activity {
             long nowNanos = System.nanoTime();
             float dt = lastDrawNanos == 0L
                     ? (1f / 60f)
-                    : Math.min(0.10f, Math.max(0.001f, (nowNanos - lastDrawNanos) / 1_000_000_000f));
+                    : Math.min(1f / 30f, Math.max(0.001f, (nowNanos - lastDrawNanos) / 1_000_000_000f));
             lastDrawNanos = nowNanos;
             float elapsedSeconds = nowNanos / 1_000_000_000f;
 
