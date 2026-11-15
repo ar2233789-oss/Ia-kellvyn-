@@ -20,6 +20,7 @@ O workflow `.github/workflows/lab-validation.yml` executa:
 5. testes unitários, compilação, integridade e assinatura do APK Android.
 
 O workflow `.github/workflows/visual-capture.yml` captura a web e o Android em viewport equivalente, nas telas principais/configurações e nas paletas esmeralda/dourada. Ele gera alinhamento por recorte, overlay, heatmap, diff e JSON com métricas. A comparação é diagnóstica: não transforma diferenças em aprovação automática nem redimensiona as imagens.
+A captura Android é conduzida por `scripts/capture_native_ui.py`: verifica a árvore de acessibilidade, reconhece e tenta recuperar o diálogo `System UI isn't responding`, localiza controles por texto/descrição e registra diagnósticos quando a UI não responde. Os seletores são cobertos por `scripts/test_capture_native_ui.py`.
 
 ## Áreas cobertas
 
