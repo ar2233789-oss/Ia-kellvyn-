@@ -1,80 +1,37 @@
-name: Kellvyn visual parity captures
+name: Kellvyn Poco F6 virtual comparison (WebView vs native)
+
 on:
   push:
     branches: [main]
-    paths: ['snapshot/android/app/src/main/java/com/kellvyn/assistant/MainActivity.java',
-      'snapshot/android/app/src/main/java/com/kellvyn/assistant/LocalBrain.kt',
-      'snapshot/src/components/kellvyn/DigitalRain.tsx',
-      'snapshot/src/components/kellvyn/KellvynApp.tsx',
-      'snapshot/src/components/kellvyn/ColorStudio.tsx',
-      'snapshot/src/styles.css', 'scripts/align_capture_pair.py', 'scripts/compare_screenshots.py', 'scripts/capture_native_ui.py', '.github/workflows/visual-capture.yml']
+    paths:
+      - 'snapshot/android/**'
+      - 'snapshot/src/**'
+      - 'lab-reference-android/**'
+      - 'scripts/prepare_poco_f6_virtual.sh'
+      - 'scripts/capture_poco_f6_pair.py'
+      - 'scripts/compare_screenshots.py'
+      - '.github/workflows/visual-capture.yml'
   pull_request:
-    paths: ['snapshot/android/app/src/main/java/com/kellvyn/assistant/MainActivity.java',
-      'snapshot/android/app/src/main/java/com/kellvyn/assistant/LocalBrain.kt',
-      'snapshot/src/components/kellvyn/DigitalRain.tsx',
-      'snapshot/src/components/kellvyn/KellvynApp.tsx',
-      'snapshot/src/components/kellvyn/ColorStudio.tsx',
-      'snapshot/src/styles.css', 'scripts/align_capture_pair.py', 'scripts/compare_screenshots.py', 'scripts/capture_native_ui.py', '.github/workflows/visual-capture.yml']
+    paths:
+      - 'snapshot/android/**'
+      - 'snapshot/src/**'
+      - 'lab-reference-android/**'
+      - 'scripts/prepare_poco_f6_virtual.sh'
+      - 'scripts/capture_poco_f6_pair.py'
+      - 'scripts/compare_screenshots.py'
+      - '.github/workflows/visual-capture.yml'
   workflow_dispatch:
+
 permissions:
   contents: read
 
 concurrency:
-  group: kellvyn-visual-parity-${{ github.ref }}
+  group: kellvyn-poco-f6-virtual-\${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  web-capture:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - name: Install and build reference
-        run: cd snapshot && bun install --frozen-lockfile && bun run test && bun run build
-      - name: Install Playwright
-        run: cd snapshot && npm install --no-save playwright && npx playwright install --with-deps chromium
-      - name: Capture web states
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd snapshot
-          mkdir -p out
-          bun run dev -- --host 127.0.0.1 --port 4173 --strictPort > /tmp/kellvyn-web.log 2>&1 &
-          for n in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then break; fi
-            [ "$n" != "60" ] || { cat /tmp/kellvyn-web.log; exit 1; }
-            sleep 2
-          done
-          node --input-type=module <<'NODE'
-          import { chromium } from "playwright";
-          const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
-          const page = await browser.newPage({ viewport: { width: 444, height: 913 }, deviceScaleFactor: 2.75, isMobile: true, hasTouch: true });
-          const errors = [];
-          page.on("pageerror", error => errors.push(String(error)));
-          await page.goto("http://127.0.0.1:4173/", { waitUntil: "networkidle", timeout: 60000 });
-          await page.getByRole("heading", { name: "Kellvyn Assistente" }).waitFor({ state: "visible" });
-          await page.screenshot({ path: "out/web-reference.png" });
-          await page.getByRole("button", { name: "Configurações", exact: true }).click();
-          await page.getByRole("heading", { name: "CONFIGURAÇÕES DO KELLVYN" }).waitFor({ state: "visible" });
-          await page.screenshot({ path: "out/web-settings.png" });
-          await page.getByRole("button", { name: "Preto e Dourado", exact: true }).click();
-          await page.waitForTimeout(350);
-          await page.screenshot({ path: "out/web-settings-gold.png" });
-          await page.getByRole("button", { name: "Fechar", exact: true }).last().click();
-          await page.getByRole("heading", { name: "Kellvyn Assistente" }).waitFor({ state: "visible" });
-          await page.screenshot({ path: "out/web-main-gold.png" });
-          if (errors.length) throw new Error("Web errors: " + errors.join(" | "));
-          await browser.close();
-          NODE
-      - uses: actions/upload-artifact@v4
-        with:
-          name: kellvyn-web-captures
-          path: snapshot/out/*.png
-          if-no-files-found: error
-          retention-days: 7
-
-  native-build:
+  build-candidates:
+    name: Build native app and lab-only WebView reference
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -86,12 +43,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Install Android SDK
+      - name: Install Android SDK packages
         shell: bash
         run: |
           set -euo pipefail
-          SDK_ROOT="$ANDROID_HOME"
-          if [ -z "$SDK_ROOT" ]; then SDK_ROOT=/usr/local/lib/android/sdk; fi
+          SDK_ROOT="\${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
           test -n "$SDKMANAGER"
           export ANDROID_HOME="$SDK_ROOT" ANDROID_SDK_ROOT="$SDK_ROOT"
@@ -99,97 +55,164 @@ jobs:
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
           set +o pipefail; yes | "$SDKMANAGER" --licenses >/dev/null; set -o pipefail
           "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
-      - name: Test and build native candidate
+      - name: Test and build the native Kellvyn APK
         working-directory: snapshot/android
         run: gradle testDebugUnitTest assembleDebug --no-daemon --stacktrace
-      - name: Verify native APK
+      - name: Build the isolated WebView reference APK (not part of Kellvyn)
+        working-directory: lab-reference-android
+        run: gradle assembleDebug --no-daemon --stacktrace
+      - name: Verify both APK packages and signatures
         shell: bash
         run: |
           set -euo pipefail
-          APK=snapshot/android/app/build/outputs/apk/debug/app-debug.apk
-          test -s "$APK"
-          unzip -t "$APK" >/dev/null
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.kellvyn.assistant'"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$APK"
+          NATIVE="snapshot/android/app/build/outputs/apk/debug/app-debug.apk"
+          REFERENCE="lab-reference-android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$NATIVE"
+          test -s "$REFERENCE"
+          unzip -t "$NATIVE" >/dev/null
+          unzip -t "$REFERENCE" >/dev/null
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$NATIVE" | grep -F "package: name='com.kellvyn.assistant'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$REFERENCE" | grep -F "package: name='com.kellvyn.labreference'"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$NATIVE"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$REFERENCE"
       - uses: actions/upload-artifact@v4
         with:
           name: kellvyn-native-debug-apk
           path: snapshot/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
-
-  native-capture:
-    needs: [native-build]
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: kellvyn-native-debug-apk
-          path: artifacts/apk
-      - name: Capture native UI on Android 15
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_7
-          cores: 4
-          ram-size: 8192M
-          heap-size: 512M
-          disk-size: 8G
-          emulator-boot-timeout: 600
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          disable-animations: false
-          script: python scripts/capture_native_ui.py
-      - name: Upload native screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: kellvyn-native-captures
-          path: artifacts/native/*
-          if-no-files-found: warn
+          name: kellvyn-lab-webview-reference-apk
+          path: lab-reference-android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
           retention-days: 7
 
-  compare-captures:
-    needs: [web-capture, native-capture]
-    if: always() && needs.web-capture.result == 'success' && needs.native-capture.result == 'success'
+  same-device-comparison:
+    name: Render both versions on PocoF6Virtual and compare
+    needs: [build-candidates]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install --disable-pip-version-check numpy pillow
-      - uses: actions/download-artifact@v4
-        with:
-          name: kellvyn-web-captures
-          path: artifacts/web
-      - uses: actions/download-artifact@v4
-        with:
-          name: kellvyn-native-captures
-          path: artifacts/native
-      - name: Align and compare screen states
+      - name: Install comparison tools
+        run: python -m pip install --disable-pip-version-check numpy pillow
+      - uses: oven-sh/setup-bun@v2
+      - name: Build the web reference and start its local server
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p artifacts/aligned artifacts/comparison
-          compare_pair() {
-            local name="$1" web="$2" native="$3"
-            python scripts/align_capture_pair.py --reference "artifacts/web/$web" --candidate "artifacts/native/$native" --output-dir artifacts/aligned --name "$name" --candidate-top-px 66
-            python scripts/compare_screenshots.py --reference "artifacts/aligned/$name-reference-aligned.png" --candidate "artifacts/aligned/$name-candidate-aligned.png" --output-dir artifacts/comparison --name "$name" --channel-threshold 16
-          }
-          compare_pair main web-reference.png native-screen.png
-          compare_pair settings web-settings.png native-settings.png
-          compare_pair settings-gold web-settings-gold.png native-settings-gold.png
-          compare_pair main-gold web-main-gold.png native-main-gold.png
-      - uses: actions/upload-artifact@v4
+          cd snapshot
+          bun install --frozen-lockfile
+          bun run test
+          bun run build
+          bun run dev -- --host 127.0.0.1 --port 4173 --strictPort > /tmp/kellvyn-web.log 2>&1 &
+          echo $! > /tmp/kellvyn-web.pid
+          cd ..
+          READY=0
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then READY=1; break; fi
+            sleep 2
+          done
+          if [ "$READY" != "1" ]; then cat /tmp/kellvyn-web.log; exit 1; fi
+      - uses: actions/download-artifact@v4
         with:
-          name: kellvyn-visual-comparisons
-          path: |
-            artifacts/aligned/*
-            artifacts/comparison/*
-          if-no-files-found: error
+          name: kellvyn-native-debug-apk
+          path: artifacts/apk
+      - uses: actions/download-artifact@v4
+        with:
+          name: kellvyn-lab-webview-reference-apk
+          path: artifacts/apk
+      - name: Create the original PocoF6Virtual device profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /opt/hostedtoolcache/CodeQL /usr/local/share/powershell || true
+          export ANDROID_HOME="\${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p artifacts
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          bash scripts/prepare_poco_f6_virtual.sh
+      - name: Boot PocoF6Virtual, render WebView and native app, and compare
+        shell: bash
+        timeout-minutes: 35
+        run: |
+          set -euo pipefail
+          export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          mkdir -p artifacts/poco-f6
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+          "$ANDROID_HOME/emulator/emulator" -avd PocoF6Virtual -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -camera-back none > /tmp/poco-f6-virtual-emulator.log 2>&1 &
+          EMULATOR_PID=$!
+          trap 'status=$?; set +e; cp /tmp/poco-f6-virtual-emulator.log artifacts/poco-f6/emulator.log 2>/dev/null; if [ "$status" -ne 0 ]; then timeout 12s adb logcat -d -t 3000 > artifacts/poco-f6/failure-logcat.txt 2>&1; timeout 12s adb shell dumpsys activity activities > artifacts/poco-f6/failure-activities.txt 2>&1; timeout 12s adb shell screencap -p /data/local/tmp/poco-f6-failure.png >/dev/null 2>&1; timeout 12s adb pull /data/local/tmp/poco-f6-failure.png artifacts/poco-f6/failure-screen.png >/dev/null 2>&1; fi; kill "$EMULATOR_PID" 2>/dev/null; exit "$status"' EXIT
+          DEVICE_READY=0
+          for attempt in $(seq 1 100); do
+            if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then cat /tmp/poco-f6-virtual-emulator.log; exit 1; fi
+            if adb devices | grep -Eq '^emulator-[0-9]+[[:space:]]+device$'; then DEVICE_READY=1; break; fi
+            sleep 2
+          done
+          if [ "$DEVICE_READY" != "1" ]; then echo "PocoF6Virtual did not register in ADB"; exit 1; fi
+          BOOTED=0
+          for attempt in $(seq 1 120); do
+            VALUE="$(timeout 10s adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+            if [ "$VALUE" = "1" ]; then BOOTED=1; break; fi
+            sleep 5
+          done
+          if [ "$BOOTED" != "1" ]; then echo "PocoF6Virtual did not finish Android boot"; exit 1; fi
+          adb shell wm size 1220x2712
+          adb shell wm density 440
+          adb reverse tcp:4173 tcp:4173
+          python scripts/capture_poco_f6_pair.py
+          compare_pair() {
+            local name="$1" reference="$2" candidate="$3"
+            python scripts/compare_screenshots.py \
+              --reference "artifacts/poco-f6/webview/$reference" \
+              --candidate "artifacts/poco-f6/native/$candidate" \
+              --output-dir "artifacts/poco-f6/comparison/$name" \
+              --name "$name" \
+              --reference-crop-top 66 --candidate-crop-top 66 \
+              --reference-crop-bottom 66 --candidate-crop-bottom 66 \
+              --channel-threshold 16
+          }
+          compare_pair main webview-main.png native-main.png
+          compare_pair settings webview-settings.png native-settings.png
+          compare_pair gold-settings webview-gold-settings.png native-gold-settings.png
+          compare_pair gold-main webview-gold-main.png native-gold-main.png
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("artifacts/poco-f6/comparison")
+          reports = []
+          for name in ("main", "settings", "gold-settings", "gold-main"):
+              path = root / name / "comparison-report.json"
+              data = json.loads(path.read_text(encoding="utf-8"))
+              reports.append(data["comparison"])
+          output = {
+              "status": "compared",
+              "reference": "Android WebView APK (lab-only)",
+              "candidate": "Kellvyn native Android APK",
+              "sameVirtualDevice": "PocoF6Virtual",
+              "sameViewport": "1220x2712 @ 440dpi",
+              "hardwareProfile": "8GB RAM, 4 vCPU, Android 15 API 35, SwiftShader; Pixel 7 base device template with Poco F6 overrides",
+              "screens": reports,
+              "pixelPerfect": all(item["changedPixelsPercent"] == 0 for item in reports),
+              "note": "The percentages are measured differences, not a claim of pixel-perfect parity. WebView is not included in the release APK.",
+          }
+          Path("artifacts/poco-f6/summary.json").write_text(json.dumps(output, indent=2) + "\n", encoding="utf-8")
+          print(json.dumps(output, indent=2))
+          PY
+      - name: Upload same-device screenshots, overlays, heatmaps and metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kellvyn-pocof6-webview-vs-native
+          path: artifacts/poco-f6/**
+          if-no-files-found: warn
           retention-days: 14
