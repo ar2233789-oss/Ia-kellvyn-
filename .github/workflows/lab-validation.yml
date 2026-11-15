@@ -1,0 +1,45 @@
+name: Kellvyn isolated parity lab
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'snapshot/**'
+      - 'visual-tests/**'
+      - 'scripts/compare_screenshots.py'
+      - 'scripts/test_compare_screenshots.py'
+      - '.github/workflows/lab-validation.yml'
+  pull_request:
+    paths:
+      - 'snapshot/**'
+      - 'visual-tests/**'
+      - 'scripts/compare_screenshots.py'
+      - 'scripts/test_compare_screenshots.py'
+      - '.github/workflows/lab-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lab-tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install screenshot comparison dependencies
+        run: python -m pip install --disable-pip-version-check numpy pillow
+      - name: Run deterministic comparator tests
+        run: python -m unittest scripts/test_compare_screenshots.py -v
+      - name: Validate snapshot source inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s snapshot/src/components/kellvyn/KellvynApp.tsx
+          test -s snapshot/src/components/kellvyn/DigitalRain.tsx
+          test -s snapshot/android/app/src/main/java/com/kellvyn/assistant/MainActivity.java
+          test -s snapshot/android/app/src/main/java/com/kellvyn/assistant/LocalBrain.kt
+          test -s visual-tests/PARITY-MATRIX.md
+          echo "Core web and native snapshot files are present."
