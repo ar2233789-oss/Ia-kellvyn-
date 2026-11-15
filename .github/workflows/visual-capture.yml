@@ -7,14 +7,14 @@ on:
       'snapshot/src/components/kellvyn/DigitalRain.tsx',
       'snapshot/src/components/kellvyn/KellvynApp.tsx',
       'snapshot/src/components/kellvyn/ColorStudio.tsx',
-      'snapshot/src/styles.css', 'scripts/align_capture_pair.py', 'scripts/compare_screenshots.py', '.github/workflows/visual-capture.yml']
+      'snapshot/src/styles.css', 'scripts/align_capture_pair.py', 'scripts/compare_screenshots.py', 'scripts/capture_native_ui.py', '.github/workflows/visual-capture.yml']
   pull_request:
     paths: ['snapshot/android/app/src/main/java/com/kellvyn/assistant/MainActivity.java',
       'snapshot/android/app/src/main/java/com/kellvyn/assistant/LocalBrain.kt',
       'snapshot/src/components/kellvyn/DigitalRain.tsx',
       'snapshot/src/components/kellvyn/KellvynApp.tsx',
       'snapshot/src/components/kellvyn/ColorStudio.tsx',
-      'snapshot/src/styles.css', 'scripts/align_capture_pair.py', 'scripts/compare_screenshots.py', '.github/workflows/visual-capture.yml']
+      'snapshot/src/styles.css', 'scripts/align_capture_pair.py', 'scripts/compare_screenshots.py', 'scripts/capture_native_ui.py', '.github/workflows/visual-capture.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -142,36 +142,7 @@ jobs:
           emulator-boot-timeout: 600
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           disable-animations: false
-          script: >-
-            set -e &&
-            mkdir -p artifacts/native &&
-            adb shell wm size 1220x2712 &&
-            adb shell wm density 440 &&
-            adb install -r artifacts/apk/app-debug.apk &&
-            adb shell am start -W -n com.kellvyn.assistant/.MainActivity &&
-            sleep 8 &&
-            adb shell screencap -p /data/local/tmp/native-screen.png &&
-            adb pull /data/local/tmp/native-screen.png artifacts/native/native-screen.png &&
-            adb shell input tap 1170 130 &&
-            sleep 3 &&
-            adb shell screencap -p /data/local/tmp/native-settings.png &&
-            adb pull /data/local/tmp/native-settings.png artifacts/native/native-settings.png &&
-            adb shell uiautomator dump /data/local/tmp/kellvyn-lab-ui.xml &&
-            adb pull /data/local/tmp/kellvyn-lab-ui.xml artifacts/native/settings-ui.xml &&
-            COORDS="$(python3 -c 'import re,sys,xml.etree.ElementTree as E; r=E.parse(sys.argv[1]).getroot(); n=next(n for n in r.iter("node") if n.get("text","").strip().casefold()=="preto e dourado"); m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.get("bounds","")); a,b,c,d=map(int,m.groups()); print((a+c)//2,(b+d)//2)' artifacts/native/settings-ui.xml)" &&
-            adb shell input tap $COORDS &&
-            sleep 4 &&
-            adb shell screencap -p /data/local/tmp/native-settings-gold.png &&
-            adb pull /data/local/tmp/native-settings-gold.png artifacts/native/native-settings-gold.png &&
-            adb shell uiautomator dump /data/local/tmp/kellvyn-lab-ui.xml &&
-            adb pull /data/local/tmp/kellvyn-lab-ui.xml artifacts/native/gold-settings-ui.xml &&
-            CLOSE="$(python3 -c 'import re,sys,xml.etree.ElementTree as E; r=E.parse(sys.argv[1]).getroot(); n=next(n for n in r.iter("node") if n.get("text","").strip().casefold()=="fechar"); m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.get("bounds","")); a,b,c,d=map(int,m.groups()); print((a+c)//2,(b+d)//2)' artifacts/native/gold-settings-ui.xml)" &&
-            adb shell input tap $CLOSE &&
-            sleep 3 &&
-            adb shell screencap -p /data/local/tmp/native-main-gold.png &&
-            adb pull /data/local/tmp/native-main-gold.png artifacts/native/native-main-gold.png &&
-            adb shell dumpsys meminfo com.kellvyn.assistant > artifacts/native/native-meminfo.txt &&
-            adb logcat -d -t 1500 > artifacts/native/native-logcat.txt
+          script: python scripts/capture_native_ui.py
       - name: Upload native screenshots
         if: always()
         uses: actions/upload-artifact@v4
