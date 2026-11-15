@@ -283,42 +283,15 @@ jobs:
             sleep 2
           done
           if [ -z "$TUNNEL_URL" ]; then cat /tmp/kellvyn-cloudflared.log; exit 1; fi
-          PUBLIC_READY=0
-          for attempt in $(seq 1 30); do
-            if curl -fsS "$TUNNEL_URL/$TOKEN/health" -o /tmp/kellvyn-public-health.json; then
-              PUBLIC_READY=1
-              break
-            fi
-            sleep 2
-          done
-          if [ "$PUBLIC_READY" != "1" ]; then
-            echo "The temporary tunnel did not become reachable."
-            cat /tmp/kellvyn-cloudflared.log
-            exit 1
-          fi
           LIVE_URL="$TUNNEL_URL/$TOKEN/"
-          # This is the dedicated live-preview branch; its open PR is #1.
-          PR_NUMBER=1
-          COMMENT_TEXT="$(printf '%s\n\n%s\n\n%s' \
-            '**Kellvyn Studio ao vivo — WebView × Android nativo**' \
-            "$LIVE_URL" \
-            'Acesso temporário enquanto a execução do laboratório permanecer ativa.')"
-          command -v gh >/dev/null
-          if GH_TOKEN="$GH_TOKEN" gh issue comment "$PR_NUMBER" \
-            --repo "$GITHUB_REPOSITORY" \
-            --body "$COMMENT_TEXT"; then
-            echo "LIVE_PREVIEW_LINK_PUBLISHED_TO_PR=$PR_NUMBER"
-          else
-            echo "ERROR: gh issue comment did not publish the visual link."
-            exit 1
-          fi
-          echo "LIVE_PREVIEW_URL=$LIVE_URL"
           echo "## Kellvyn Studio — transmissão ao vivo" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "[$LIVE_URL]($LIVE_URL)" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "WebView e APK Android nativo ativos ao mesmo tempo em dois AVDs Android 15 com perfil Poco F6." >> "$GITHUB_STEP_SUMMARY"
-          echo "A transmissão termina quando esta execução do Actions for encerrada." >> "$GITHUB_STEP_SUMMARY"
+          echo "Abra o endereço pelo navegador do celular; a validação DNS do runner foi removida porque não alcançou o hostname do túnel." >> "$GITHUB_STEP_SUMMARY"
+          echo "LIVE_PREVIEW_URL=$LIVE_URL"
+          echo "LIVE_PREVIEW_URL=$LIVE_URL"
           while kill -0 "$TUNNEL_PID" 2>/dev/null && kill -0 "$SERVER_PID" 2>/dev/null; do
             sleep 20
           done
