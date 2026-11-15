@@ -20,6 +20,8 @@ O workflow `.github/workflows/lab-validation.yml` executa:
 5. testes unitários, compilação, integridade e assinatura do APK Android.
 
 O workflow `.github/workflows/visual-capture.yml` captura a web e o Android em viewport equivalente, nas telas principais/configurações e nas paletas esmeralda/dourada. Ele gera alinhamento por recorte, overlay, heatmap, diff e JSON com métricas. A comparação é diagnóstica: não transforma diferenças em aprovação automática nem redimensiona as imagens.
+
+O `studio/index.html` é uma oficina independente e offline. O workflow `.github/workflows/studio-workbench.yml` valida a estrutura HTML/JavaScript e executa testes Playwright de comparação, exportação, efeitos, paletas, arte 2D, projeção 3D/4D, linha do tempo e relatórios. O Studio não modifica automaticamente o app.
 A captura Android é conduzida por `scripts/capture_native_ui.py`: verifica a árvore de acessibilidade, reconhece e tenta recuperar o diálogo `System UI isn't responding`, localiza controles por texto/descrição e registra diagnósticos quando a UI não responde. Os seletores são cobertos por `scripts/test_capture_native_ui.py`.
 
 ## Áreas cobertas
@@ -27,7 +29,8 @@ A captura Android é conduzida por `scripts/capture_native_ui.py`: verifica a á
 - `animation-catalog/`: chuva, neve, folhas, raios, indicador de pensamento e microfone.
 - `visual-tests/`: protocolo e matriz de paridade.
 - `ai-evaluation/`: casos comportamentais e contratuais para a mesma IA em web e Android.
-- `scripts/`: comparadores, alinhamento e verificadores de paridade.
+- `studio/index.html`: Studio offline de produção com comparador de screenshots, editor de paletas, iluminação, prancheta 2D, cubo 3D, projeção 4D, linha do tempo e análise de logs/vídeos.
+- `scripts/`: comparadores, alinhamento, captura nativa resiliente, verificadores de paridade e testes do Studio.
 - `evidence/`: evidências e relatórios de cada execução.
 - `poco-f6-lab/`: parâmetros e limitações do AVD.
 
