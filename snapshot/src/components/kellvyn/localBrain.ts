@@ -55,9 +55,10 @@ const SDK_URL = "https://cdn.jsdelivr.net/npm/@litert-lm/core@0.18.0/+esm";
 const MODEL_FILE_NAME = "kellvyn-gemma-4-e2b-gpu.litertlm";
 const EXPECTED_MODEL_BYTES = 2_008_432_640;
 
-\n\nlet enginePromise: Promise<LocalEngine> | null = null;
+let enginePromise: Promise<LocalEngine> | null = null;
 let sdkPromise: Promise<EngineModule> | null = null;
-type CachedConversation = { instance: LocalConversation; strongProtection: boolean };\nconst conversations = new Map<string, CachedConversation>();
+type CachedConversation = { instance: LocalConversation; strongProtection: boolean };
+const conversations = new Map<string, CachedConversation>();
 
 async function getSdk(): Promise<EngineModule> {
   if (!sdkPromise) {
