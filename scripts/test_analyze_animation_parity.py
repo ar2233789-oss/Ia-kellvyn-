@@ -17,6 +17,13 @@ class AnimationMetricsTests(unittest.TestCase):
         events, _, _ = detect_flash_events(values, fps=5)
         self.assertEqual(events, [])
 
+    def test_startup_flash_does_not_contaminate_full_recording_baseline(self):
+        # Native recording may begin while the first flash is already active.
+        values = np.array([40, 40, 32, 25] + [20] * 6 + [31, 39, 20, 20, 20, 31, 39, 20, 20], dtype=float)
+        events, baseline, _ = detect_flash_events(values, fps=5)
+        self.assertAlmostEqual(baseline, 20.0)
+        self.assertGreaterEqual(len(events), 3)
+
     def test_analyzes_real_frame_sequence_shape(self):
         rng = np.random.default_rng(12)
         frames = np.full((20, 800, 360), 18, dtype=np.uint8)
