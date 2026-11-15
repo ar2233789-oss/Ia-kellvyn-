@@ -29,6 +29,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupMenu;
 import android.widget.ScrollView;
@@ -79,6 +80,7 @@ public class MainActivity extends Activity {
     private Uri selectedAttachmentUri = null;
     private TextView footerStatus;
     private View sendButton;
+    private LinearLayout attachmentPreview;
     private TextView activeReplyBubble;
     private View thinkingIndicator;
     private TextView thinkingLabel;
@@ -174,6 +176,16 @@ public class MainActivity extends Activity {
         // The reference draws one rounded border around both the prompt and the action row.
         composerPanel.setPadding(dp(8), dp(8), dp(8), dp(8));
         composerPanel.setBackground(roundRect(uiPanelAltColor(), dp(16), themeAccentColor(0x8845A989), dp(1)));
+
+        attachmentPreview = new LinearLayout(this);
+        attachmentPreview.setOrientation(LinearLayout.HORIZONTAL);
+        attachmentPreview.setGravity(Gravity.CENTER_VERTICAL);
+        attachmentPreview.setVisibility(View.GONE);
+        LinearLayout.LayoutParams attachmentPreviewLp = new LinearLayout.LayoutParams(-1, -2);
+        attachmentPreviewLp.bottomMargin = dp(6);
+        composerPanel.addView(attachmentPreview, attachmentPreviewLp);
+        updateAttachmentPreview();
+
         LinearLayout.LayoutParams composerPanelLp = new LinearLayout.LayoutParams(-1, -2);
         composerPanelLp.setMargins(dp(12), dp(4), dp(12), dp(12));
         shell.addView(composerPanel, composerPanelLp);
@@ -257,6 +269,57 @@ public class MainActivity extends Activity {
         // Theme changes replace this view tree without invoking Activity.onResume().
         // Start the replacement effect layer immediately; onPause() still stops it normally.
         if (rain != null) rain.start();
+    }
+
+    private void updateAttachmentPreview() {
+        if (attachmentPreview == null) return;
+        attachmentPreview.removeAllViews();
+        if (selectedAttachment == null || selectedAttachment.trim().isEmpty()) {
+            attachmentPreview.setVisibility(View.GONE);
+            return;
+        }
+
+        attachmentPreview.setVisibility(View.VISIBLE);
+        attachmentPreview.setPadding(dp(7), dp(6), dp(7), dp(6));
+        attachmentPreview.setBackground(roundRect(uiPanelColor(), dp(10),
+                themeAccentColor(0x5545A989), dp(1)));
+
+        String mime = null;
+        if (selectedAttachmentUri != null) {
+            try { mime = getContentResolver().getType(selectedAttachmentUri); }
+            catch (Exception ignored) {}
+        }
+
+        if (mime != null && mime.startsWith("image/") && selectedAttachmentUri != null) {
+            ImageView thumbnail = new ImageView(this);
+            thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            thumbnail.setBackground(roundRect(uiPanelAltColor(), dp(7), 0, 0));
+            thumbnail.setClipToOutline(true);
+            try { thumbnail.setImageURI(selectedAttachmentUri); }
+            catch (Exception ignored) {}
+            attachmentPreview.addView(thumbnail, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        } else {
+            LucideIconView fileIcon = new LucideIconView("paperclip", null, 18f, accent);
+            attachmentPreview.addView(fileIcon, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        }
+
+        TextView name = text(selectedAttachment, 12, uiTextColor(), false);
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(0, -2, 1);
+        nameLp.leftMargin = dp(8);
+        nameLp.rightMargin = dp(6);
+        attachmentPreview.addView(name, nameLp);
+
+        LucideIconView remove = new LucideIconView("x", "Remover anexo", 16f, uiMutedColor());
+        remove.setBackground(roundRect(0x00000000, dp(7), 0, 0));
+        attachmentPreview.addView(remove, new LinearLayout.LayoutParams(dp(32), dp(32)));
+        remove.setOnClickListener(v -> {
+            selectedAttachment = null;
+            selectedAttachmentUri = null;
+            updateAttachmentPreview();
+            updateSendButtonState();
+        });
     }
 
     private void updateSendButtonState() {
@@ -896,6 +959,7 @@ public class MainActivity extends Activity {
         composer.setText("");
         selectedAttachment = null;
         selectedAttachmentUri = null;
+        updateAttachmentPreview();
         updateSendButtonState();
         saveTranscript();
 
@@ -1051,6 +1115,7 @@ public class MainActivity extends Activity {
             } catch (Exception ignored) {}
             selectedAttachment = name == null ? "arquivo selecionado" : name;
             selectedAttachmentUri = uri;
+            updateAttachmentPreview();
             updateSendButtonState();
             toast("Anexo selecionado: " + selectedAttachment + ". O conteúdo será preparado pelo motor local ao enviar.");
             composer.requestFocus();
@@ -1163,7 +1228,6 @@ public class MainActivity extends Activity {
         android.app.Dialog dialog = new android.app.Dialog(this);
         LinearLayout sheet = new LinearLayout(this);
         sheet.setOrientation(LinearLayout.VERTICAL);
-        sheet.setClipToOutline(true);
         android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
         background.setColor(uiPanelColor());
         background.setCornerRadii(new float[] {
@@ -1198,10 +1262,17 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(false);
         scroll.setClipToPadding(false);
-        scroll.setPadding(0, 0, 0, 0);
         body.setPadding(dp(16), dp(12), dp(16), dp(14));
+        body.measure(
+                View.MeasureSpec.makeMeasureSpec(
+                        getResources().getDisplayMetrics().widthPixels - dp(32), View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int maxSheetHeight = (int) (getResources().getDisplayMetrics().heightPixels * 0.88f);
+        int fixedSheetHeight = dp(62 + 1 + 1 + 64);
+        int maxBodyHeight = Math.max(dp(100), maxSheetHeight - fixedSheetHeight);
+        int bodyHeight = Math.min(body.getMeasuredHeight(), maxBodyHeight);
         scroll.addView(body, new ScrollView.LayoutParams(-1, -2));
-        sheet.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        sheet.addView(scroll, new LinearLayout.LayoutParams(-1, bodyHeight));
 
         View bottomLine = new View(this);
         bottomLine.setBackgroundColor(themeAccentColor(0x3345A989));
@@ -1225,7 +1296,7 @@ public class MainActivity extends Activity {
             WindowManager.LayoutParams params = window.getAttributes();
             params.gravity = Gravity.BOTTOM;
             params.width = WindowManager.LayoutParams.MATCH_PARENT;
-            params.height = (int) (getResources().getDisplayMetrics().heightPixels * 0.88f);
+            params.height = WindowManager.LayoutParams.WRAP_CONTENT;
             params.dimAmount = 0.70f;
             window.setAttributes(params);
             window.setLayout(params.width, params.height);
