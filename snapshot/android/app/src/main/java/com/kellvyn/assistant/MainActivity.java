@@ -78,6 +78,7 @@ public class MainActivity extends Activity {
     private String selectedAttachment = null;
     private Uri selectedAttachmentUri = null;
     private TextView footerStatus;
+    private View sendButton;
     private TextView activeReplyBubble;
     private View thinkingIndicator;
     private TextView thinkingLabel;
@@ -172,7 +173,7 @@ public class MainActivity extends Activity {
         composerPanel.setOrientation(LinearLayout.VERTICAL);
         // The reference draws one rounded border around both the prompt and the action row.
         composerPanel.setPadding(dp(8), dp(8), dp(8), dp(8));
-        composerPanel.setBackground(roundRect(uiPanelAltColor(), dp(18), themeAccentColor(0x8845A989), dp(1)));
+        composerPanel.setBackground(roundRect(uiPanelAltColor(), dp(16), themeAccentColor(0x8845A989), dp(1)));
         LinearLayout.LayoutParams composerPanelLp = new LinearLayout.LayoutParams(-1, -2);
         composerPanelLp.setMargins(dp(12), dp(4), dp(12), dp(12));
         shell.addView(composerPanel, composerPanelLp);
@@ -195,6 +196,13 @@ public class MainActivity extends Activity {
         composer.setPadding(dp(8), dp(8), dp(8), dp(8));
         composer.setMinHeight(dp(40));
         composer.setIncludeFontPadding(false);
+        composer.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                updateSendButtonState();
+            }
+            @Override public void afterTextChanged(android.text.Editable editable) {}
+        });
         entry.addView(composer, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout controls = new LinearLayout(this);
@@ -215,7 +223,7 @@ public class MainActivity extends Activity {
         footerStatus.setGravity(Gravity.CENTER);
         footerStatus.setPadding(dp(10), 0, dp(10), 0);
         footerStatus.setBackground(roundRect(uiPanelAltColor(), dp(12), themeAccentColor(0x8845A989), dp(1)));
-        controls.addView(footerStatus, new LinearLayout.LayoutParams(-2, dp(34)));
+        controls.addView(footerStatus, new LinearLayout.LayoutParams(-2, dp(30)));
 
         View spacer = new View(this);
         controls.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1));
@@ -224,10 +232,11 @@ public class MainActivity extends Activity {
         controls.addView(mic, new LinearLayout.LayoutParams(dp(32), dp(32)));
         mic.setOnClickListener(v -> startSpeech());
 
-        View send = new LucideIconView("send", "Enviar mensagem");
-        send.setBackground(roundRect(0x00000000, dp(18), themeAccentColor(0x8845A989), dp(1)));
-        controls.addView(send, new LinearLayout.LayoutParams(dp(32), dp(32)));
-        send.setOnClickListener(v -> sendMessage());
+        sendButton = new LucideIconView("send", "Enviar mensagem");
+        sendButton.setBackground(roundRect(0x00000000, dp(18), themeAccentColor(0x8845A989), dp(1)));
+        controls.addView(sendButton, new LinearLayout.LayoutParams(dp(32), dp(32)));
+        sendButton.setOnClickListener(v -> sendMessage());
+        updateSendButtonState();
 
         View navDivider = new View(this);
         navDivider.setBackgroundColor(themeAccentColor(0x4433C995));
@@ -248,6 +257,14 @@ public class MainActivity extends Activity {
         // Theme changes replace this view tree without invoking Activity.onResume().
         // Start the replacement effect layer immediately; onPause() still stops it normally.
         if (rain != null) rain.start();
+    }
+
+    private void updateSendButtonState() {
+        if (sendButton == null || composer == null) return;
+        boolean hasContent = !composer.getText().toString().trim().isEmpty() || selectedAttachment != null;
+        boolean enabled = hasContent && !waitingForReply;
+        sendButton.setEnabled(enabled);
+        sendButton.setAlpha(enabled ? 1f : 0.35f);
     }
 
     private android.graphics.drawable.GradientDrawable roundRect(int color, int radius, int stroke, int strokeWidth) {
@@ -838,6 +855,7 @@ public class MainActivity extends Activity {
     private void startBrainRequest(String displayText, String prompt, Uri attachmentUri, String attachmentName) {
         if (waitingForReply) return;
         waitingForReply = true;
+        updateSendButtonState();
 
         // After process death, the local transcript survives but the in-memory model conversation does not.
         // Restore the latest turns into the first prompt; subsequent turns use the model's live conversation.
@@ -849,6 +867,7 @@ public class MainActivity extends Activity {
         composer.setText("");
         selectedAttachment = null;
         selectedAttachmentUri = null;
+        updateSendButtonState();
         saveTranscript();
 
         activeReplyBubble = addMessageView(false, "Preparando o cérebro local…");
@@ -886,6 +905,7 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> {
                     hideThinkingIndicator();
                     waitingForReply = false;
+                    updateSendButtonState();
                     String finalAnswer = text;
                     int savedFiles = saveGeneratedProjectFiles(displayText, text);
                     if (savedFiles > 0) {
@@ -906,6 +926,7 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> {
                     hideThinkingIndicator();
                     waitingForReply = false;
+                    updateSendButtonState();
                     String errorText = "Não consegui concluir esta solicitação no motor local: " + message;
                     if (activeReplyBubble != null) activeReplyBubble.setText(errorText);
                     transcript.add("S|" + errorText);
@@ -1001,6 +1022,7 @@ public class MainActivity extends Activity {
             } catch (Exception ignored) {}
             selectedAttachment = name == null ? "arquivo selecionado" : name;
             selectedAttachmentUri = uri;
+            updateSendButtonState();
             toast("Anexo selecionado: " + selectedAttachment + ". O conteúdo será preparado pelo motor local ao enviar.");
             composer.requestFocus();
         } else if (requestCode == SAVE_TEXT && data.getData() != null) {
@@ -2332,7 +2354,7 @@ public class MainActivity extends Activity {
             refresh[0].run();
             toast("Informação salva na memória local.");
         });
-        refresh.run();
+        refresh[0].run();
 
         android.app.Dialog memoryDialog = showBottomSheetDialog(
                 "MEMÓRIA LOCAL", "Informações salvas explicitamente neste aparelho", panel);
