@@ -2283,7 +2283,8 @@ public class MainActivity extends Activity {
             boolean hasLightning = effects.contains("raios");
             activeEffects = new HashSet<>(effects);
             if (hasLightning && (!hadLightning || nextLightningAt == 0L)) {
-                nextLightningAt = System.currentTimeMillis() + 1200L;
+                // Match the web component's 2–6 second initial lightning delay after enabling.
+                nextLightningAt = System.currentTimeMillis() + 2000L + (long)(Math.random() * 4000L);
                 flashIntensity = 0f;
                 lastLightningFrameAt = 0L;
             } else if (!hasLightning) {
