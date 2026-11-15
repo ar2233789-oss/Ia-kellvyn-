@@ -567,10 +567,10 @@ class LocalBrain(context: Context) {
             backendName = backend
             supportsVision = vision
             val protectionEnabled = app.getSharedPreferences("kellvyn_native", Context.MODE_PRIVATE)
-                .getBoolean("protection", false)
+                .getBoolean("protection", true)
             val config = ConversationConfig(
                 systemInstruction = Contents.of(ProtectionPolicy.systemInstruction(buildSystemPrompt(), protectionEnabled)),
-                samplerConfig = SamplerConfig(topK = 40, topP = 0.9, temperature = 0.65),
+                samplerConfig = SamplerConfig(topK = 40, topP = 0.9, temperature = 0.6),
                 prefillPrefaceOnInit = true,
                 maxOutputToken = MAX_OUTPUT_TOKENS
             )
@@ -601,8 +601,8 @@ class LocalBrain(context: Context) {
             emptyList()
         }
         if (saved.isEmpty()) return SYSTEM_PROMPT
-        return SYSTEM_PROMPT + "\\n\\nInformações que o usuário pediu para você lembrar (use só quando forem relevantes e não as recite sem necessidade):\\n" +
-            saved.joinToString("\\n") { "- " + it }
+        return SYSTEM_PROMPT + "\n\nInformações que o usuário pediu para você lembrar (use só quando forem relevantes e não as recite sem necessidade):\n" +
+            saved.joinToString("\n") { "- " + it }
     }
 
     private fun createEngine(backend: Backend, enableVision: Boolean): Engine {
@@ -824,7 +824,7 @@ class LocalBrain(context: Context) {
         private const val BUFFER_SIZE = 64 * 1024
         private const val PROGRESS_CHUNK_BYTES = 25_000_000L
         private const val MAX_CONTEXT_TOKENS = 4096
-        private const val MAX_OUTPUT_TOKENS = 768
+        private const val MAX_OUTPUT_TOKENS = 1536
         private const val MAX_PROJECT_OUTPUT_TOKENS = 2048
         private const val MAX_IMAGES = 3
         private const val MAX_PDF_PAGES = 3
