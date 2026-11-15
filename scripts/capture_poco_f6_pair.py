@@ -77,39 +77,19 @@ def wait_reference_state(state: str, timeout: int = 75) -> None:
 
 
 def capture_reference_state(state: str) -> Path:
-    # Each reference case starts with a clean localStorage so palette/effect state
-    # is deterministic. Open the real React controls through Android accessibility
-    # (a physical tap), not a synthetic DOM click.
+    # Drive the actual React handlers through the lab bridge. The WebView APK
+    # verifies the rendered state and persisted settings before reporting READY.
+    # This avoids relying on Android UIAutomator exposing the DOM accessibility tree.
     adb("shell", "am", "force-stop", REF_PACKAGE, timeout=30)
     adb("shell", "pm", "clear", REF_PACKAGE, timeout=45)
     adb("logcat", "-c", timeout=15)
     adb(
         "shell", "am", "start", "-n", REF_COMPONENT,
-        "--es", "lab_state", "main",
+        "--es", "lab_state", state,
         timeout=45,
     )
-    wait_reference_state("main")
-
-    if state != "main":
-        tap_ui_label("Configurações", fallback=(1138, 185))
-        assert_ui_label("CONFIGURAÇÕES DO KELLVYN", timeout=25)
-
-    if state in ("gold-settings", "gold-main"):
-        tap_ui_label("Preto e Dourado", timeout=25)
-        time.sleep(1.2)
-        if state == "gold-main":
-            tap_ui_label("Fechar", timeout=15)
-            assert_ui_label_absent("CONFIGURAÇÕES DO KELLVYN")
-    elif state in ("effects-settings", "effects-main"):
-        tap_ui_label("Raios", timeout=25)
-        time.sleep(1.2)
-        if state == "effects-main":
-            tap_ui_label("Fechar", timeout=15)
-            assert_ui_label_absent("CONFIGURAÇÕES DO KELLVYN")
-    elif state not in ("main", "settings"):
-        raise RuntimeError(f"Unsupported reference capture state: {state}")
-
-    time.sleep(1)
+    wait_reference_state(state)
+    time.sleep(0.8)
     return capture(f"webview-{state}", WEB)
 
 def screenshot_array(path: Path) -> np.ndarray:
@@ -280,8 +260,8 @@ def capture_native_states() -> dict:
 
     capture("native-main", NATIVE)
 
-    # Locate settings by accessible content description. The former y=130 tap
-    # landed inside the status bar and produced a false "settings" screenshot.
+    # Locate Settings using the native content description, with a measured fallback
+    # for AVD skins that omit custom content descriptions from the accessibility tree.
     tap_ui_label("Configurações", fallback=(1138, 199))
     assert_ui_label("CONFIGURAÇÕES DO KELLVYN", timeout=25)
     settings = capture("native-settings", NATIVE)
