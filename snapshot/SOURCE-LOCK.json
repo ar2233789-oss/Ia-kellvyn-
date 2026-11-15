@@ -1,0 +1,11 @@
+{
+  "sourceRepository": "ar2233789-oss/kellvyn-ai-assistant",
+  "sourceCommit": "8e6d4456f0ceec57a65f5a078c26277e447d68bf",
+  "protectedWebFiles": {
+    "snapshot/src/components/kellvyn/ColorStudio.tsx": "6d4a46b6b9462078a97efdf505bfc7e9f4c276b3",
+    "snapshot/src/components/kellvyn/DigitalRain.tsx": "8e1b01d0f3e77a95f920e5a52048770f9b2aaf40",
+    "snapshot/src/components/kellvyn/store.ts": "a04d2bffae951ffb221184a08c436af879d098d5",
+    "snapshot/src/styles.css": "04ee72845e2ebda8543e874417aa87417ef14f74"
+  },
+  "note": "These SHA-1 values are Git blob object IDs from the approved web source. The lab must not change these files."
+}
