@@ -1024,21 +1024,153 @@ public class MainActivity extends Activity {
     }
 
     private void askWebAddress() {
-        EditText url = new EditText(this);
-        url.setSingleLine(true);
-        url.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        url.setHint("https://");
-        new AlertDialog.Builder(this).setTitle("Abrir Web")
-                .setMessage("O navegador abre páginas separadamente. Para permitir consultas limitadas da IA à Wikipédia em português, ative Acesso à Web no menu + ou nas configurações.")
-                .setView(url).setNegativeButton("Cancelar", null)
-                .setPositiveButton("Abrir", (d, w) -> {
-                    String value = url.getText().toString().trim();
-                    if (!value.isEmpty()) {
-                        if (!value.matches("(?i)^https?://.*")) value = "https://" + value;
-                        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(value))); }
-                        catch (ActivityNotFoundException e) { toast("Nenhum navegador disponível."); }
-                    }
-                }).show();
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+
+        LinearLayout searchRow = new LinearLayout(this);
+        searchRow.setGravity(Gravity.CENTER_VERTICAL);
+        EditText query = new EditText(this);
+        query.setSingleLine(true);
+        query.setTextSize(14);
+        query.setTextColor(uiTextColor());
+        query.setHintTextColor(uiMutedColor());
+        query.setHint("Pesquise ou digite um site");
+        query.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        query.setPadding(dp(12), dp(8), dp(12), dp(8));
+        query.setBackground(roundRect(uiPanelAltColor(), dp(9), themeAccentColor(0x5545A989), dp(1)));
+        searchRow.addView(query, new LinearLayout.LayoutParams(0, dp(44), 1));
+
+        TextView go = text("Ir", 13, uiBackground(), true);
+        go.setGravity(Gravity.CENTER);
+        go.setBackground(roundRect(accent, dp(9), accent, dp(1)));
+        LinearLayout.LayoutParams goLp = new LinearLayout.LayoutParams(dp(58), dp(44));
+        goLp.leftMargin = dp(8);
+        searchRow.addView(go, goLp);
+        body.addView(searchRow);
+
+        Runnable open = () -> {
+            String value = query.getText().toString().trim();
+            if (value.isEmpty()) return;
+            if (!value.matches("(?i)^https?://.*")) {
+                if (value.matches("(?i)^[a-z0-9.-]+\\.[a-z]{2,}(/.*)?$")) value = "https://" + value;
+                else value = "https://www.google.com/search?q=" + Uri.encode(value);
+            }
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(value)));
+            } catch (ActivityNotFoundException error) {
+                toast("Nenhum navegador disponível.");
+            }
+        };
+        go.setOnClickListener(v -> open.run());
+        query.setOnEditorActionListener((v, actionId, event) -> {
+            open.run();
+            return true;
+        });
+
+        TextView shortcutsLabel = text("ATALHOS", 10, uiMutedColor(), true);
+        shortcutsLabel.setLetterSpacing(0.16f);
+        LinearLayout.LayoutParams shortcutsLabelLp = new LinearLayout.LayoutParams(-1, -2);
+        shortcutsLabelLp.topMargin = dp(18);
+        shortcutsLabelLp.bottomMargin = dp(8);
+        body.addView(shortcutsLabel, shortcutsLabelLp);
+
+        LinearLayout shortcuts = new LinearLayout(this);
+        shortcuts.setOrientation(LinearLayout.HORIZONTAL);
+        String[][] sites = {
+                {"Google", "https://www.google.com"},
+                {"YouTube", "https://www.youtube.com"},
+                {"Gmail", "https://mail.google.com"},
+                {"Wikipédia", "https://pt.wikipedia.org"}
+        };
+        for (String[] site : sites) {
+            TextView item = text(site[0], 11, uiTextColor(), false);
+            item.setGravity(Gravity.CENTER);
+            item.setPadding(dp(3), dp(10), dp(3), dp(10));
+            item.setBackground(roundRect(uiPanelAltColor(), dp(8), themeAccentColor(0x5545A989), dp(1)));
+            LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(0, dp(40), 1);
+            itemLp.rightMargin = dp(5);
+            shortcuts.addView(item, itemLp);
+            item.setOnClickListener(v -> {
+                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(site[1]))); }
+                catch (ActivityNotFoundException error) { toast("Nenhum navegador disponível."); }
+            });
+        }
+        body.addView(shortcuts);
+        showBottomSheetDialog("NAVEGADOR", "Pesquise ou abra um endereço usando a conexão do celular", body);
+    }
+
+    private android.app.Dialog showBottomSheetDialog(String title, String subtitle, LinearLayout body) {
+        android.app.Dialog dialog = new android.app.Dialog(this);
+        LinearLayout sheet = new LinearLayout(this);
+        sheet.setOrientation(LinearLayout.VERTICAL);
+        sheet.setClipToOutline(true);
+        android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
+        background.setColor(uiPanelColor());
+        background.setCornerRadii(new float[] {
+                dp(16), dp(16), dp(16), dp(16), 0f, 0f, 0f, 0f
+        });
+        sheet.setBackground(background);
+
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(16), dp(12), dp(12), dp(12));
+        LinearLayout titleColumn = new LinearLayout(this);
+        titleColumn.setOrientation(LinearLayout.VERTICAL);
+        TextView heading = text(title, 14, accent, true);
+        heading.setLetterSpacing(0.18f);
+        titleColumn.addView(heading);
+        if (subtitle != null && !subtitle.isEmpty()) {
+            TextView sub = text(subtitle, 12, uiMutedColor(), false);
+            LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(-1, -2);
+            subLp.topMargin = dp(3);
+            titleColumn.addView(sub, subLp);
+        }
+        header.addView(titleColumn, new LinearLayout.LayoutParams(0, -2, 1));
+        LucideIconView close = new LucideIconView("x", "Fechar", 18f, accent);
+        header.addView(close, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        close.setOnClickListener(v -> dialog.dismiss());
+        sheet.addView(header);
+
+        View topLine = new View(this);
+        topLine.setBackgroundColor(themeAccentColor(0x3345A989));
+        sheet.addView(topLine, new LinearLayout.LayoutParams(-1, dp(1)));
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(false);
+        scroll.setClipToPadding(false);
+        scroll.setPadding(0, 0, 0, 0);
+        body.setPadding(dp(16), dp(12), dp(16), dp(14));
+        scroll.addView(body, new ScrollView.LayoutParams(-1, -2));
+        sheet.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        View bottomLine = new View(this);
+        bottomLine.setBackgroundColor(themeAccentColor(0x3345A989));
+        sheet.addView(bottomLine, new LinearLayout.LayoutParams(-1, dp(1)));
+        TextView footer = text("Fechar", 14, accent, false);
+        footer.setGravity(Gravity.CENTER);
+        footer.setBackground(roundRect(uiPanelAltColor(), dp(12), themeAccentColor(0x6645A989), dp(1)));
+        LinearLayout.LayoutParams footerLp = new LinearLayout.LayoutParams(-1, dp(42));
+        footerLp.setMargins(dp(12), dp(10), dp(12), dp(12));
+        sheet.addView(footer, footerLp);
+        footer.setOnClickListener(v -> dialog.dismiss());
+
+        dialog.setContentView(sheet);
+        dialog.setCancelable(true);
+        dialog.show();
+        android.view.Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawableResource(android.R.color.transparent);
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+            WindowManager.LayoutParams params = window.getAttributes();
+            params.gravity = Gravity.BOTTOM;
+            params.width = WindowManager.LayoutParams.MATCH_PARENT;
+            params.height = (int) (getResources().getDisplayMetrics().heightPixels * 0.88f);
+            params.dimAmount = 0.70f;
+            window.setAttributes(params);
+            window.setLayout(params.width, params.height);
+        }
+        return dialog;
     }
 
     private void showHistory() {
@@ -1386,17 +1518,39 @@ public class MainActivity extends Activity {
     }
 
     private void openPhoneApps() {
-        Intent home = new Intent(Intent.ACTION_MAIN);
-        home.addCategory(Intent.CATEGORY_HOME);
-        home.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        try { startActivity(home); }
-        catch (ActivityNotFoundException e) { toast("Não foi possível abrir a tela de aplicativos do Android."); }
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        TextView hint = text("Abra a lista de aplicativos instalados no seu Android.", 13, uiMutedColor(), false);
+        hint.setPadding(0, 0, 0, dp(12));
+        body.addView(hint);
+        TextView open = text("Abrir apps do celular", 14, accent, true);
+        open.setGravity(Gravity.CENTER);
+        open.setCompoundDrawablePadding(dp(8));
+        open.setPadding(dp(14), dp(14), dp(14), dp(14));
+        open.setBackground(roundRect(uiPanelAltColor(), dp(12), themeAccentColor(0x6645A989), dp(1)));
+        body.addView(open, new LinearLayout.LayoutParams(-1, -2));
+        android.app.Dialog dialog = showBottomSheetDialog("APPS DO CELULAR", null, body);
+        open.setOnClickListener(v -> {
+            dialog.dismiss();
+            Intent home = new Intent(Intent.ACTION_MAIN);
+            home.addCategory(Intent.CATEGORY_HOME);
+            home.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try { startActivity(home); }
+            catch (ActivityNotFoundException e) { toast("Não foi possível abrir a tela de aplicativos do Android."); }
+        });
     }
 
     private void showPlugins() {
-        new AlertDialog.Builder(this).setTitle("PLUGINS")
-                .setMessage("As integrações são coordenadas pela única Kellvyn IA através do chat principal. Não há troca de modelo nem cadastro de IAs/provedores alternativos nesta aplicação.")
-                .setPositiveButton("Fechar", null).show();
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        TextView intro = text(
+                "Ferramentas e integrações são coordenadas pela única Kellvyn IA através da conversa principal. Não há troca de modelo, seletor de provedores ou cadastro de outras IAs nesta aplicação.",
+                13, uiMutedColor(), false);
+        intro.setLineSpacing(dp(3), 1.1f);
+        intro.setPadding(dp(12), dp(12), dp(12), dp(12));
+        intro.setBackground(roundRect(uiPanelAltColor(), dp(10), themeAccentColor(0x3345A989), dp(1)));
+        body.addView(intro, new LinearLayout.LayoutParams(-1, -2));
+        showBottomSheetDialog("PLUGINS", "Ferramentas da Kellvyn", body);
     }
 
     private String botStatusText(String platform, boolean enabled, boolean tokenPresent) {
@@ -1415,7 +1569,7 @@ public class MainActivity extends Activity {
     private void showBots() {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(dp(18), dp(8), dp(18), dp(4));
+        layout.setPadding(0, 0, 0, 0);
 
         TextView instructions = text(
                 "Configure os tokens pelo chat principal. Telegram: /bot telegram token SEU_TOKEN. " +
@@ -1443,7 +1597,8 @@ public class MainActivity extends Activity {
 
                 LinearLayout row = new LinearLayout(MainActivity.this);
                 row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(dp(2), dp(8), dp(2), dp(8));
+                row.setPadding(dp(12), dp(10), dp(12), dp(10));
+                row.setBackground(roundRect(uiPanelColor(), dp(12), themeAccentColor(0x3345A989), dp(1)));
 
                 LinearLayout labels = new LinearLayout(MainActivity.this);
                 labels.setOrientation(LinearLayout.VERTICAL);
@@ -1460,7 +1615,9 @@ public class MainActivity extends Activity {
                 toggle.setChecked(enabled);
                 toggle.setEnabled(supportsRuntime && tokenPresent && brain.hasModel());
                 row.addView(toggle, new LinearLayout.LayoutParams(-2, -2));
-                botsContainer.addView(row, new LinearLayout.LayoutParams(-1, -2));
+                LinearLayout.LayoutParams botRowLp = new LinearLayout.LayoutParams(-1, -2);
+                botRowLp.topMargin = dp(6);
+                botsContainer.addView(row, botRowLp);
 
                 View divider = new View(MainActivity.this);
                 divider.setBackgroundColor(themeAccentColor(0x2233C995));
@@ -1499,11 +1656,8 @@ public class MainActivity extends Activity {
         BotRow discord = new BotRow("discord", "Discord", true);
         BotRow whatsapp = new BotRow("whatsapp", "WhatsApp", false);
 
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("BOTS ATIVOS")
-                .setView(layout)
-                .setPositiveButton("Fechar", null)
-                .create();
+        android.app.Dialog dialog = showBottomSheetDialog("BOTS ATIVOS",
+                "Mantenha os bots ativos ou desligue quando quiser", layout);
         dialog.setOnShowListener(ignored -> {
             android.os.Handler handler = new android.os.Handler();
             Runnable update = new Runnable() {
@@ -1575,9 +1729,11 @@ public class MainActivity extends Activity {
         fileName.setTextColor(uiTextColor());
         fileName.setHintTextColor(uiMutedColor());
         fileName.setTextSize(14);
+        fileName.setPadding(dp(12), dp(8), dp(12), dp(8));
+        fileName.setBackground(roundRect(uiPanelAltColor(), dp(9), themeAccentColor(0x5545A989), dp(1)));
 
         EditText source = new EditText(this);
-        source.setHint("Escreva seu código ou nota aqui…");
+        source.setHint("Escreva seu código aqui…");
         source.setTextColor(uiTextColor());
         source.setHintTextColor(uiMutedColor());
         source.setTextSize(13);
@@ -1587,53 +1743,91 @@ public class MainActivity extends Activity {
         source.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         source.setTypeface(Typeface.MONOSPACE);
         source.setBackground(roundRect(uiPanelAltColor(), dp(10), themeAccentColor(0x5545A989), dp(1)));
-        source.setPadding(dp(10), dp(10), dp(10), dp(10));
+        source.setPadding(dp(12), dp(10), dp(12), dp(10));
 
-        LinearLayout form = new LinearLayout(this);
-        form.setOrientation(LinearLayout.VERTICAL);
-        form.setPadding(dp(4), dp(8), dp(4), dp(4));
-        form.addView(fileName, new LinearLayout.LayoutParams(-1, dp(46)));
-        LinearLayout.LayoutParams sourceLp = new LinearLayout.LayoutParams(-1, -2);
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.addView(fileName, new LinearLayout.LayoutParams(-1, dp(44)));
+        LinearLayout.LayoutParams sourceLp = new LinearLayout.LayoutParams(-1, dp(240));
         sourceLp.topMargin = dp(8);
-        form.addView(source, sourceLp);
+        body.addView(source, sourceLp);
 
-        TextView newFile = text("Novo", 12, accent, true);
-        newFile.setGravity(Gravity.CENTER);
-        newFile.setPadding(dp(12), dp(8), dp(12), dp(8));
-        newFile.setOnClickListener(v -> { fileName.setText(""); source.setText(""); fileName.requestFocus(); });
-        LinearLayout.LayoutParams newLp = new LinearLayout.LayoutParams(-2, dp(36));
-        newLp.topMargin = dp(4);
-        form.addView(newFile, newLp);
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams actionsLp = new LinearLayout.LayoutParams(-1, -2);
+        actionsLp.topMargin = dp(8);
+        body.addView(actions, actionsLp);
 
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("EDITOR DE CÓDIGO")
-                .setView(form)
-                .setPositiveButton("Salvar", null)
-                .setNeutralButton("Arquivos salvos", null)
-                .setNegativeButton("Fechar", null)
-                .create();
-        dialog.setOnShowListener(v -> {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
-                String name = fileName.getText().toString().trim();
-                String text = source.getText().toString();
-                if (name.isEmpty()) name = "nota.txt";
-                if (text.trim().isEmpty()) { toast("Escreva algo antes de salvar."); return; }
-                saveEditorFile(name, text);
-                fileName.setText(name);
-                toast("Arquivo salvo neste aparelho.");
-            });
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(view -> {
-                ArrayList<String> names = readEditorFileNames();
-                if (names.isEmpty()) { toast("Nenhum código ou nota salvo."); return; }
-                new AlertDialog.Builder(this).setTitle("Arquivos salvos")
-                        .setItems(names.toArray(new String[0]), (d, which) -> {
-                            String name = names.get(which);
-                            fileName.setText(name);
-                            source.setText(prefs.getString("editor:" + name, ""));
-                        }).setNegativeButton("Fechar", null).show();
-            });
+        TextView save = text("Salvar", 13, uiBackground(), true);
+        save.setGravity(Gravity.CENTER);
+        save.setBackground(roundRect(accent, dp(9), accent, dp(1)));
+        actions.addView(save, new LinearLayout.LayoutParams(0, dp(40), 1));
+        TextView fresh = text("Novo", 13, accent, false);
+        fresh.setGravity(Gravity.CENTER);
+        fresh.setBackground(roundRect(uiPanelAltColor(), dp(9), themeAccentColor(0x5545A989), dp(1)));
+        LinearLayout.LayoutParams freshLp = new LinearLayout.LayoutParams(dp(80), dp(40));
+        freshLp.leftMargin = dp(8);
+        actions.addView(fresh, freshLp);
+
+        LinearLayout savedFiles = new LinearLayout(this);
+        savedFiles.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams savedLp = new LinearLayout.LayoutParams(-1, -2);
+        savedLp.topMargin = dp(18);
+        body.addView(savedFiles, savedLp);
+
+        Runnable refreshSaved = () -> {
+            savedFiles.removeAllViews();
+            TextView label = text("ARQUIVOS SALVOS", 10, uiMutedColor(), true);
+            label.setLetterSpacing(0.16f);
+            savedFiles.addView(label);
+            ArrayList<String> names = readEditorFileNames();
+            if (names.isEmpty()) {
+                TextView empty = text("Nenhum código ou nota salvo.", 12, uiMutedColor(), false);
+                empty.setPadding(0, dp(10), 0, dp(4));
+                savedFiles.addView(empty);
+                return;
+            }
+            for (String name : names) {
+                LinearLayout item = new LinearLayout(this);
+                item.setGravity(Gravity.CENTER_VERTICAL);
+                item.setPadding(dp(10), dp(9), dp(10), dp(9));
+                item.setBackground(roundRect(uiPanelAltColor(), dp(8), themeAccentColor(0x3345A989), dp(1)));
+                TextView file = text(name, 12, uiTextColor(), false);
+                file.setSingleLine(true);
+                file.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+                item.addView(file, new LinearLayout.LayoutParams(-1, -2));
+                LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(-1, -2);
+                itemLp.topMargin = dp(6);
+                savedFiles.addView(item, itemLp);
+                item.setOnClickListener(v -> {
+                    fileName.setText(name);
+                    source.setText(prefs.getString("editor:" + name, ""));
+                    source.setSelection(source.length());
+                });
+            }
+        };
+        refreshSaved.run();
+
+        save.setOnClickListener(v -> {
+            String name = fileName.getText().toString().trim();
+            String contents = source.getText().toString();
+            if (name.isEmpty()) name = "nota.txt";
+            if (contents.trim().isEmpty()) {
+                toast("Escreva algo antes de salvar.");
+                return;
+            }
+            saveEditorFile(name, contents);
+            fileName.setText(name);
+            refreshSaved.run();
+            toast("Arquivo salvo neste aparelho.");
         });
-        dialog.show();
+        fresh.setOnClickListener(v -> {
+            fileName.setText("");
+            source.setText("");
+            fileName.requestFocus();
+        });
+
+        showBottomSheetDialog("EDITOR DE CÓDIGO", "Anotações e arquivos de código salvos neste aparelho", body);
     }
 
     private ArrayList<String> readEditorFileNames() {
