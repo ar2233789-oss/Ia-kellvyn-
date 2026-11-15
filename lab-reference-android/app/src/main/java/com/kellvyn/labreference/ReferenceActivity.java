@@ -144,6 +144,9 @@ public final class ReferenceActivity extends Activity {
                 "gold.scrollIntoView({block:'center'});invokeReactClick(gold);" +
                 "const persisted=await waitFor(()=>{try{const p=JSON.parse(localStorage.getItem('kv.settings')||'{}');return p.color?.toUpperCase()==='#D4AF37'&&p.bg?.toUpperCase()==='#0A0907';}catch(e){return false;}});" +
                 "if(!persisted){report(false,'gold palette tap did not persist expected colors');return 'gold-palette-not-persisted';}" +
+                "const rendered=await waitFor(()=>{const s=getComputedStyle(document.documentElement);return s.getPropertyValue('--brand').trim().toUpperCase()==='#D4AF37'&&s.getPropertyValue('--bg').trim().toUpperCase()==='#0A0907';});" +
+                "if(!rendered){report(false,'gold palette persisted but its CSS theme was not rendered');return 'gold-theme-not-rendered';}" +
+                "await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));" +
                 "if(state==='gold-main'){" +
                 "const close=await waitFor(()=>document.querySelector('button[aria-label=\\\"Fechar\\\"]'));" +
                 "if(!close){report(false,'settings close button missing after gold palette');return 'settings-close-missing';}" +
@@ -154,6 +157,14 @@ public final class ReferenceActivity extends Activity {
                 "done();return state+'-ready';" +
                 "}" +
                 "if(state==='effects-settings'||state==='effects-main'){" +
+                // Native capture keeps the previously selected gold palette while checking effects.
+                // Apply and verify the same palette in WebView before capturing either effects state.
+                "const gold=await waitFor(()=>Array.from(document.querySelectorAll('button')).find(b=>b.innerText.replace(/\\s+/g,' ').trim().includes('Preto e Dourado')));" +
+                "if(!gold){report(false,'gold palette button missing before effects capture');return 'effects-gold-button-missing';}" +
+                "gold.scrollIntoView({block:'center'});invokeReactClick(gold);" +
+                "const goldRendered=await waitFor(()=>{try{const p=JSON.parse(localStorage.getItem('kv.settings')||'{}');const s=getComputedStyle(document.documentElement);return p.color?.toUpperCase()==='#D4AF37'&&p.bg?.toUpperCase()==='#0A0907'&&s.getPropertyValue('--brand').trim().toUpperCase()==='#D4AF37'&&s.getPropertyValue('--bg').trim().toUpperCase()==='#0A0907';}catch(e){return false;}});" +
+                "if(!goldRendered){report(false,'gold palette did not finish rendering before effects capture');return 'effects-gold-theme-not-rendered';}" +
+                "await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));" +
                 "const lightning=await waitFor(()=>Array.from(document.querySelectorAll('button')).find(b=>b.innerText.trim()==='Raios'));" +
                 "if(!lightning){report(false,'lightning effect button missing');return 'lightning-button-missing';}" +
                 "const already=(()=>{try{const p=JSON.parse(localStorage.getItem('kv.settings')||'{}');return Array.isArray(p.effect)&&p.effect.includes('chuva')&&p.effect.includes('raios');}catch(e){return false;}})();" +
