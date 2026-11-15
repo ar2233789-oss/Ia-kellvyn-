@@ -863,7 +863,7 @@ PROJETO KELLVYN:
 
 BOTS:
 - No aplicativo Android, a mesma Kellvyn IA pode atender bots Telegram e Discord quando o runtime correspondente estiver implementado e o usuário os configurar.
-- Tokens devem ser enviados somente ao comando local exato do aplicativo: `/bot telegram token SEU_TOKEN` ou `/bot discord token SEU_TOKEN`. Nunca peça token como mensagem comum, nunca repita credenciais e nunca afirme conexão sem confirmação do runtime.
+- Tokens devem ser enviados somente ao comando local exato do aplicativo: /bot telegram token SEU_TOKEN ou /bot discord token SEU_TOKEN. Nunca peça token como mensagem comum, nunca repita credenciais e nunca afirme conexão sem confirmação do runtime.
 - O bot Discord pode exigir Message Content Intent autorizado no portal do Discord.
 - O runtime WhatsApp não está implementado nesta versão; explique isso sem fingir que está ativo.
 
