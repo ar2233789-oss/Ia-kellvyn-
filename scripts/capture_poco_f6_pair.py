@@ -241,8 +241,6 @@ def assert_ui_label_absent(label: str, timeout: int = 8) -> None:
 
 
 def verify_native_effects() -> dict:
-
-def verify_native_effects() -> dict:
     raw = adb(
         "shell", "run-as", APP_PACKAGE, "cat", "shared_prefs/kellvyn_native.xml",
         timeout=20,
