@@ -128,56 +128,35 @@ jobs:
           emulator-boot-timeout: 600
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           disable-animations: false
-          script: |
-            set -euo pipefail
-            mkdir -p artifacts/native
-            adb shell wm size 1220x2712
-            adb shell wm density 440
-            adb install -r artifacts/apk/app-debug.apk
-            adb shell am start -W -n com.kellvyn.assistant/.MainActivity
-            sleep 8
-            capture() {
-              local remote="$1" dest="$2"
-              adb shell screencap -p "$remote"
-              adb pull "$remote" "$dest" >/dev/null
-              test -s "$dest"
-            }
-            dump_ui() {
-              rm -f artifacts/native/current-ui.xml
-              adb shell uiautomator dump /sdcard/kellvyn-lab-ui.xml >/dev/null 2>&1
-              adb pull /sdcard/kellvyn-lab-ui.xml artifacts/native/current-ui.xml >/dev/null
-            }
-            tap_label() {
-              local mode="$1" label="$2" point
-              dump_ui
-              point="$(python3 - "$mode" "$label" artifacts/native/current-ui.xml <<'PY'
-            import re, sys, xml.etree.ElementTree as ET
-            mode, label, filename = sys.argv[1:]
-            attr = "content-desc" if mode == "desc" else "text"
-            root = ET.parse(filename).getroot()
-            nodes = [n for n in root.iter("node") if n.attrib.get(attr, "").strip().casefold() == label.casefold()]
-            if not nodes: raise SystemExit(f"Missing UI label {mode}={label}")
-            parent = {child: node for node in root.iter("node") for child in node}
-            node = nodes[0]
-            while node in parent and node.attrib.get("clickable") != "true": node = parent[node]
-            match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.attrib.get("bounds", ""))
-            if not match: raise SystemExit(f"No clickable bounds for {label}")
-            x1,y1,x2,y2 = map(int, match.groups())
-            print((x1+x2)//2, (y1+y2)//2)
-            PY
-              )"
-              read -r x y <<< "$point"
-              adb shell input tap "$x" "$y"
-              sleep 2
-            }
-            capture /sdcard/native-screen.png artifacts/native/native-screen.png
-            tap_label desc "Configurações"
-            capture /sdcard/native-settings.png artifacts/native/native-settings.png
-            tap_label text "Preto e Dourado"
-            capture /sdcard/native-main-gold.png artifacts/native/native-main-gold.png
-            tap_label desc "Configurações"
-            capture /sdcard/native-settings-gold.png artifacts/native/native-settings-gold.png
-            adb shell dumpsys meminfo com.kellvyn.assistant > artifacts/native/native-meminfo.txt
+          script: >-
+            set -e &&
+            mkdir -p artifacts/native &&
+            adb shell wm size 1220x2712 &&
+            adb shell wm density 440 &&
+            adb install -r artifacts/apk/app-debug.apk &&
+            adb shell am start -W -n com.kellvyn.assistant/.MainActivity &&
+            sleep 8 &&
+            adb shell screencap -p /sdcard/native-screen.png &&
+            adb pull /sdcard/native-screen.png artifacts/native/native-screen.png &&
+            adb shell input tap 1170 130 &&
+            sleep 3 &&
+            adb shell screencap -p /sdcard/native-settings.png &&
+            adb pull /sdcard/native-settings.png artifacts/native/native-settings.png &&
+            adb shell uiautomator dump /sdcard/kellvyn-lab-ui.xml &&
+            adb pull /sdcard/kellvyn-lab-ui.xml artifacts/native/settings-ui.xml &&
+            COORDS="$(python3 -c 'import re,sys,xml.etree.ElementTree as E; r=E.parse(sys.argv[1]).getroot(); n=next(n for n in r.iter("node") if n.get("text","").strip().casefold()=="preto e dourado"); m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.get("bounds","")); a,b,c,d=map(int,m.groups()); print((a+c)//2,(b+d)//2)' artifacts/native/settings-ui.xml)" &&
+            adb shell input tap $COORDS &&
+            sleep 4 &&
+            adb shell screencap -p /sdcard/native-settings-gold.png &&
+            adb pull /sdcard/native-settings-gold.png artifacts/native/native-settings-gold.png &&
+            adb shell uiautomator dump /sdcard/kellvyn-lab-ui.xml &&
+            adb pull /sdcard/kellvyn-lab-ui.xml artifacts/native/gold-settings-ui.xml &&
+            CLOSE="$(python3 -c 'import re,sys,xml.etree.ElementTree as E; r=E.parse(sys.argv[1]).getroot(); n=next(n for n in r.iter("node") if n.get("text","").strip().casefold()=="fechar"); m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.get("bounds","")); a,b,c,d=map(int,m.groups()); print((a+c)//2,(b+d)//2)' artifacts/native/gold-settings-ui.xml)" &&
+            adb shell input tap $CLOSE &&
+            sleep 3 &&
+            adb shell screencap -p /sdcard/native-main-gold.png &&
+            adb pull /sdcard/native-main-gold.png artifacts/native/native-main-gold.png &&
+            adb shell dumpsys meminfo com.kellvyn.assistant > artifacts/native/native-meminfo.txt &&
             adb logcat -d -t 1500 > artifacts/native/native-logcat.txt
       - name: Upload native screenshots
         if: always()
