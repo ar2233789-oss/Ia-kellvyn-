@@ -12,7 +12,7 @@ for relative, expected in LOCK["protectedWebFiles"].items():
     if not path.is_file():
         raise SystemExit(f"MISSING protected reference file: {relative}")
     content = path.read_bytes()
-    header = f"blob {len(content)}\\0".encode("ascii")
+    header = b"blob " + str(len(content)).encode("ascii") + bytes([0])
     actual = hashlib.sha1(header + content).hexdigest()
     if actual != expected:
         raise SystemExit(f"REFERENCE CHANGED: {relative} expected={expected} actual={actual}")
