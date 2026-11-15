@@ -2935,8 +2935,8 @@ public class MainActivity extends Activity {
         private Set<String> activeEffects = new HashSet<>();
         private boolean initialized = false, running = false, frameScheduled = false;
         private float flashIntensity = 0f;
-        private long nextLightningAt = 0L;
-        private long lastLightningFrameAt = 0L;
+        // Count lightning intervals with the same frame-delta clock as DigitalRain.tsx.
+        private float nextBoltSeconds = 0f;
         private long lastDrawNanos = 0L;
         private long fpsWindowStartNanos = 0L;
         private int fpsWindowFrames = 0;
@@ -2946,7 +2946,7 @@ public class MainActivity extends Activity {
             flashPaint.setColor(0x18DDE8FF);
             activeEffects = renderEffectSet();
             if (activeEffects.contains("raios")) {
-                nextLightningAt = System.currentTimeMillis() + 2000L + (long)(Math.random() * 4000L);
+                nextBoltSeconds = 2f + (float)Math.random() * 4f;
             }
         }
 
@@ -2961,15 +2961,13 @@ public class MainActivity extends Activity {
             boolean hadLightning = activeEffects.contains("raios");
             boolean hasLightning = effects.contains("raios");
             activeEffects = new HashSet<>(effects);
-            if (hasLightning && (!hadLightning || nextLightningAt == 0L)) {
-                // Match the web component's 2–6 second initial lightning delay after enabling.
-                nextLightningAt = System.currentTimeMillis() + 2000L + (long)(Math.random() * 4000L);
+            if (hasLightning && (!hadLightning || nextBoltSeconds <= 0f)) {
+                // The web uses a frame-delta countdown, not wall-clock milliseconds.
+                nextBoltSeconds = 2f + (float)Math.random() * 4f;
                 flashIntensity = 0f;
-                lastLightningFrameAt = 0L;
             } else if (!hasLightning) {
-                nextLightningAt = 0L;
+                nextBoltSeconds = 0f;
                 flashIntensity = 0f;
-                lastLightningFrameAt = 0L;
             }
             if (activeEffects.isEmpty() && frameScheduled) {
                 Choreographer.getInstance().removeFrameCallback(frameCallback);
@@ -3069,10 +3067,11 @@ public class MainActivity extends Activity {
             }
         }
 
-        private void drawLightning(Canvas c) {
-            long now = System.currentTimeMillis();
-            if (flashIntensity <= 0f && now >= nextLightningAt) {
-                // Keep the same timing envelope and geometry as the web canvas implementation.
+        private void drawLightning(Canvas c, float dt) {
+            // Keep the same frame-based countdown as DigitalRain.tsx: the next
+            // strike timer advances by the clamped animation delta, not wall time.
+            nextBoltSeconds -= dt;
+            if (flashIntensity <= 0f && nextBoltSeconds <= 0f) {
                 float endY = getHeight() * (0.45f + (float)Math.random() * 0.30f);
                 float bx = getWidth() * (0.15f + (float)Math.random() * 0.70f);
                 float by = 0f;
@@ -3090,17 +3089,10 @@ public class MainActivity extends Activity {
                     boltPointCount++;
                 }
                 flashIntensity = 1f;
-                lastLightningFrameAt = now;
-                nextLightningAt = now + 3000L + (long)(Math.random() * 6000L);
+                nextBoltSeconds = 3f + (float)Math.random() * 6f;
             }
 
             if (flashIntensity > 0f) {
-                float frameSeconds = lastLightningFrameAt == 0L
-                        ? 0.045f
-                        : Math.min(1f / 30f, Math.max(0.0f, (now - lastLightningFrameAt) / 1000f));
-                lastLightningFrameAt = now;
-
-                // Match the web flash: 12% screen wash, 85% bolt opacity and 14px glow.
                 flashPaint.setColor(Color.argb(Math.round(255f * flashIntensity * 0.12f), 221, 232, 255));
                 c.drawRect(0, 0, getWidth(), getHeight(), flashPaint);
 
@@ -3118,8 +3110,7 @@ public class MainActivity extends Activity {
                     c.drawPath(path, p);
                 }
                 p.clearShadowLayer();
-                flashIntensity = Math.max(0f, flashIntensity - 2.2f * frameSeconds);
-                if (flashIntensity == 0f) lastLightningFrameAt = 0L;
+                flashIntensity = Math.max(0f, flashIntensity - 2.2f * dt);
             }
         }
 
@@ -3168,7 +3159,7 @@ public class MainActivity extends Activity {
             if (activeEffects.contains("chuva")) drawRain(c, dt);
             if (activeEffects.contains("neve")) drawSnow(c, dt, elapsedSeconds);
             if (activeEffects.contains("folhas")) drawLeaves(c, dt, elapsedSeconds);
-            if (activeEffects.contains("raios")) drawLightning(c);
+            if (activeEffects.contains("raios")) drawLightning(c, dt);
         }
     }
 }
