@@ -47,8 +47,18 @@ def main() -> None:
     native_url = one(r'MODEL_URL = "([^"]+)"', native_policy, "native model URL")
     if web_url != native_url:
         raise AssertionError("Web and Android do not use the same pinned model artifact")
+    web_sha = one(r'const EXPECTED_MODEL_SHA256 = "([a-f0-9]{64})"', web_brain, "web model SHA-256")
+    native_sha = one(r'MODEL_SHA256 = "([a-f0-9]{64})"', native_policy, "native model SHA-256")
+    if web_sha != native_sha:
+        raise AssertionError("Web and Android model SHA-256 values differ")
     if "EXPECTED_MODEL_BYTES = 2_008_432_640" not in web_brain or "MODEL_BYTES = 2_008_432_640L" not in native_policy:
         raise AssertionError("The expected model byte count differs")
+    if "downloaded.size !== EXPECTED_MODEL_BYTES" not in web_brain or "hasher.update(chunk)" not in web_brain:
+        raise AssertionError("Browser download does not enforce exact size and streaming SHA-256")
+    if "cachedHash === EXPECTED_MODEL_SHA256" not in web_brain:
+        raise AssertionError("Browser cache is not verified before being trusted")
+    if "MIN_COMPLETE_MODEL_BYTES" in web_brain:
+        raise AssertionError("Obsolete browser model-size constant remains")
 
     web_output = int(one(r"maxOutputTokens:\s*(\d+)", web_brain, "web output token limit"))
     native_output = int(one(r"MAX_OUTPUT_TOKENS = (\d+)", native_brain, "native output token limit"))
