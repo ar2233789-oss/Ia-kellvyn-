@@ -2,12 +2,26 @@ name: Kellvyn visual parity captures
 on:
   push:
     branches: [main]
-    paths: ['snapshot/**', 'scripts/align_capture_pair.py', 'scripts/compare_screenshots.py', '.github/workflows/visual-capture.yml']
+    paths: ['snapshot/android/app/src/main/java/com/kellvyn/assistant/MainActivity.java',
+      'snapshot/android/app/src/main/java/com/kellvyn/assistant/LocalBrain.kt',
+      'snapshot/src/components/kellvyn/DigitalRain.tsx',
+      'snapshot/src/components/kellvyn/KellvynApp.tsx',
+      'snapshot/src/components/kellvyn/ColorStudio.tsx',
+      'snapshot/src/styles.css', 'scripts/align_capture_pair.py', 'scripts/compare_screenshots.py', '.github/workflows/visual-capture.yml']
   pull_request:
-    paths: ['snapshot/**', 'scripts/align_capture_pair.py', 'scripts/compare_screenshots.py', '.github/workflows/visual-capture.yml']
+    paths: ['snapshot/android/app/src/main/java/com/kellvyn/assistant/MainActivity.java',
+      'snapshot/android/app/src/main/java/com/kellvyn/assistant/LocalBrain.kt',
+      'snapshot/src/components/kellvyn/DigitalRain.tsx',
+      'snapshot/src/components/kellvyn/KellvynApp.tsx',
+      'snapshot/src/components/kellvyn/ColorStudio.tsx',
+      'snapshot/src/styles.css', 'scripts/align_capture_pair.py', 'scripts/compare_screenshots.py', '.github/workflows/visual-capture.yml']
   workflow_dispatch:
 permissions:
   contents: read
+
+concurrency:
+  group: kellvyn-visual-parity-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   web-capture:
