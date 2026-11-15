@@ -190,12 +190,14 @@ jobs:
           compare_pair settings webview-settings.png native-settings.png
           compare_pair gold-settings webview-gold-settings.png native-gold-settings.png
           compare_pair gold-main webview-gold-main.png native-gold-main.png
+          compare_pair effects-settings webview-effects-settings.png native-effects-settings.png
+          compare_pair effects-main webview-effects-main.png native-effects-main.png
           python - <<'PY'
           import json
           from pathlib import Path
           root = Path("artifacts/poco-f6/comparison")
           reports = []
-          for name in ("main", "settings", "gold-settings", "gold-main"):
+          for name in ("main", "settings", "gold-settings", "gold-main", "effects-settings", "effects-main"):
               path = root / name / "comparison-report.json"
               data = json.loads(path.read_text(encoding="utf-8"))
               reports.append(data["comparison"])
