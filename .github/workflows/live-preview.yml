@@ -299,6 +299,8 @@ jobs:
           echo "[$LIVE_URL]($LIVE_URL)" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "WebView e APK Android nativo ativos ao mesmo tempo em dois AVDs Android 15 com perfil Poco F6." >> "$GITHUB_STEP_SUMMARY"
+          echo "Branch de teste: poco-f6-live-animation @ 5226570eb1f1f21705fdd2923fbd85232f3ac710" >> "$GITHUB_STEP_SUMMARY"
+          echo "Intervalo da captura de tela: 0.7 s por dispositivo (limitado pelo ADB e pelo emulador)." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publicar o link direto do Studio no PR
         uses: actions/github-script@v7
