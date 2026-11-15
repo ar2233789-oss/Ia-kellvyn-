@@ -456,6 +456,15 @@ public class MainActivity extends Activity {
                     canvas.drawLine(6, 6, 18, 18, iconPaint);
                     canvas.drawLine(18, 6, 6, 18, iconPaint);
                     break;
+                case "trash":
+                    iconPath.reset();
+                    iconPath.moveTo(4, 7); iconPath.lineTo(20, 7);
+                    iconPath.moveTo(9, 7); iconPath.lineTo(9, 4); iconPath.lineTo(15, 4); iconPath.lineTo(15, 7);
+                    iconPath.moveTo(6, 7); iconPath.lineTo(7, 20); iconPath.lineTo(17, 20); iconPath.lineTo(18, 7);
+                    iconPath.moveTo(10, 10); iconPath.lineTo(10, 17);
+                    iconPath.moveTo(14, 10); iconPath.lineTo(14, 17);
+                    canvas.drawPath(iconPath, iconPaint);
+                    break;
                 case "copy":
                     canvas.drawRoundRect(8, 8, 20, 21, 1.5f, 1.5f, iconPaint);
                     canvas.drawRoundRect(4, 3, 16, 16, 1.5f, 1.5f, iconPaint);
@@ -1577,6 +1586,8 @@ public class MainActivity extends Activity {
                 "O modelo local precisa estar baixado antes de ativar um bot. O WhatsApp exige uma integração pública de webhook e permanece indisponível neste APK.",
                 12, uiMutedColor(), false);
         instructions.setLineSpacing(dp(3), 1f);
+        instructions.setPadding(dp(12), dp(12), dp(12), dp(12));
+        instructions.setBackground(roundRect(uiPanelAltColor(), dp(10), themeAccentColor(0x3345A989), dp(1)));
         layout.addView(instructions, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout botsContainer = new LinearLayout(this);
@@ -1603,13 +1614,21 @@ public class MainActivity extends Activity {
                 LinearLayout labels = new LinearLayout(MainActivity.this);
                 labels.setOrientation(LinearLayout.VERTICAL);
                 labels.setGravity(Gravity.CENTER_VERTICAL);
+                String badgeText = "telegram".equals(platform) ? "TG" : "discord".equals(platform) ? "DC" : "WA";
+                int badgeColor = "telegram".equals(platform) ? Color.rgb(41, 169, 235)
+                        : "discord".equals(platform) ? Color.rgb(88, 101, 242) : Color.rgb(37, 211, 102);
+                TextView badge = text(badgeText, 11, Color.WHITE, true);
+                badge.setGravity(Gravity.CENTER);
+                badge.setBackground(roundRect(badgeColor, dp(11), badgeColor, dp(1)));
+                row.addView(badge, new LinearLayout.LayoutParams(dp(36), dp(36)));
+                LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(0, -2, 1);
+                labelsLp.leftMargin = dp(10);
+                row.addView(labels, labelsLp);
                 labels.addView(text(title, 14, uiTextColor(), true));
                 status = text(botStatusText(platform, prefs.getBoolean("bot_enabled_" + platform, false), tokenPresent),
                         11, uiMutedColor(), false);
                 status.setPadding(0, dp(2), dp(8), 0);
                 labels.addView(status, new LinearLayout.LayoutParams(-1, -2));
-                row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1));
-
                 toggle = new Switch(MainActivity.this);
                 boolean enabled = supportsRuntime && prefs.getBoolean("bot_enabled_" + platform, false);
                 toggle.setChecked(enabled);
@@ -1670,10 +1689,8 @@ public class MainActivity extends Activity {
                     handler.postDelayed(this, 1500L);
                 }
             };
-            handler.post(update);
-            dialog.setOnDismissListener(event -> handler.removeCallbacks(update));
-        });
-        dialog.show();
+        handler.post(update);
+        dialog.setOnDismissListener(event -> handler.removeCallbacks(update));
     }
 
     private boolean handleLocalBotChatCommand(String userText) {
@@ -2218,8 +2235,8 @@ public class MainActivity extends Activity {
 
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(15), dp(12), dp(15), dp(6));
         TextView saved = text(data[0].length() + " informação(ões) salva(s) neste aparelho.", 12, uiMutedColor(), false);
+        panel.addView(saved);
 
         EditText entry = new EditText(this);
         entry.setSingleLine(false);
@@ -2230,37 +2247,91 @@ public class MainActivity extends Activity {
         entry.setHintTextColor(uiMutedColor());
         entry.setBackground(roundRect(uiPanelAltColor(), dp(10), themeAccentColor(0x8845A989), dp(1)));
         entry.setPadding(dp(10), dp(9), dp(10), dp(9));
-
-        TextView add = text("Salvar", 13, accent, true);
-        add.setGravity(Gravity.CENTER);
-        add.setPadding(dp(12), dp(9), dp(12), dp(9));
-        add.setBackground(roundRect(uiPanelAltColor(), dp(10), themeAccentColor(0x8845A989), dp(1)));
-
-        panel.addView(saved);
         LinearLayout.LayoutParams entryLp = new LinearLayout.LayoutParams(-1, -2);
-        entryLp.topMargin = dp(12);
+        entryLp.topMargin = dp(10);
         panel.addView(entry, entryLp);
-        LinearLayout.LayoutParams addLp = new LinearLayout.LayoutParams(-1, -2);
+
+        TextView add = text("Salvar memória", 13, uiBackground(), true);
+        add.setGravity(Gravity.CENTER);
+        add.setPadding(dp(12), dp(10), dp(12), dp(10));
+        add.setBackground(roundRect(accent, dp(10), accent, dp(1)));
+        LinearLayout.LayoutParams addLp = new LinearLayout.LayoutParams(-1, dp(40));
         addLp.topMargin = dp(8);
         panel.addView(add, addLp);
 
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams listLp = new LinearLayout.LayoutParams(-1, -2);
+        listLp.topMargin = dp(16);
+        panel.addView(list, listLp);
+
+        Runnable refresh = () -> {
+            saved.setText(data[0].length() + " informação(ões) salva(s) neste aparelho.");
+            list.removeAllViews();
+            TextView heading = text("INFORMAÇÕES SALVAS", 10, uiMutedColor(), true);
+            heading.setLetterSpacing(0.16f);
+            list.addView(heading);
+            if (data[0].length() == 0) {
+                TextView empty = text("Nenhuma memória salva.", 12, uiMutedColor(), false);
+                empty.setPadding(0, dp(10), 0, 0);
+                list.addView(empty);
+                return;
+            }
+            for (int i = 0; i < data[0].length(); i++) {
+                final int index = i;
+                LinearLayout row = new LinearLayout(this);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(dp(8), dp(6), dp(6), dp(6));
+                row.setBackground(roundRect(uiPanelAltColor(), dp(9), themeAccentColor(0x3345A989), dp(1)));
+                EditText item = new EditText(this);
+                item.setText(data[0].optString(i, ""));
+                item.setTextColor(uiTextColor());
+                item.setTextSize(12);
+                item.setSingleLine(false);
+                item.setMinLines(1);
+                item.setMaxLines(3);
+                item.setBackgroundColor(Color.TRANSPARENT);
+                item.setPadding(dp(4), dp(4), dp(4), dp(4));
+                row.addView(item, new LinearLayout.LayoutParams(0, -2, 1));
+                LucideIconView delete = new LucideIconView("trash", "Excluir memória", 16f, uiMutedColor());
+                row.addView(delete, new LinearLayout.LayoutParams(dp(32), dp(32)));
+                item.setOnFocusChangeListener((v, focused) -> {
+                    if (!focused) {
+                        String value = item.getText().toString().trim();
+                        if (!value.isEmpty()) {
+                            data[0].put(index, value);
+                            prefs.edit().putString("memory_items", data[0].toString()).apply();
+                        }
+                    }
+                });
+                delete.setOnClickListener(v -> {
+                    JSONArray next = new JSONArray();
+                    for (int j = 0; j < data[0].length(); j++) {
+                        if (j != index) next.put(data[0].optString(j, ""));
+                    }
+                    data[0] = next;
+                    prefs.edit().putString("memory_items", next.toString()).apply();
+                    refresh.run();
+                });
+                LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(-1, -2);
+                rowLp.topMargin = dp(6);
+                list.addView(row, rowLp);
+            }
+        };
         add.setOnClickListener(v -> {
             String value = entry.getText().toString().trim();
             if (value.isEmpty()) return;
             data[0].put(value);
             prefs.edit().putString("memory_items", data[0].toString()).apply();
             entry.setText("");
-            saved.setText(data[0].length() + " informação(ões) salva(s) neste aparelho.");
+            refresh.run();
             toast("Informação salva na memória local.");
         });
-        AlertDialog memoryDialog = new AlertDialog.Builder(this).setTitle("MEMÓRIA LOCAL").setView(panel)
-                .setPositiveButton("Fechar", null).create();
-        memoryDialog.setOnShowListener(ignored -> memoryDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
-            memoryDialog.dismiss();
-            showSettingsPanel();
-        }));
-        memoryDialog.setOnCancelListener(ignored -> showSettingsPanel());
-        memoryDialog.show();
+        refresh.run();
+
+        android.app.Dialog memoryDialog = showBottomSheetDialog(
+                "MEMÓRIA LOCAL", "Informações salvas explicitamente neste aparelho", panel);
+        memoryDialog.setOnDismissListener(ignored -> reopenSettingsPanelAfterDismiss());
     }
 
     private void showSettingsPanel() {
