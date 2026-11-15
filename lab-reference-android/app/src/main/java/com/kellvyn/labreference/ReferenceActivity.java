@@ -150,10 +150,11 @@ public final class ReferenceActivity extends Activity {
                 "}" +
                 "done();return state+'-ready';" +
                 "}" +
-                "if(state==='effects'||state==='effects-main'){" +
+                "if(state==='effects-settings'||state==='effects-main'){" +
                 "const lightning=await waitFor(()=>Array.from(document.querySelectorAll('button')).find(b=>b.innerText.trim()==='Raios'));" +
                 "if(!lightning){report(false,'lightning effect button missing');return 'lightning-button-missing';}" +
-                "lightning.scrollIntoView({block:'center'});lightning.click();" +
+                "const already=(()=>{try{const p=JSON.parse(localStorage.getItem('kv.settings')||'{}');return Array.isArray(p.effect)&&p.effect.includes('chuva')&&p.effect.includes('raios');}catch(e){return false;}})();" +
+                "if(!already){lightning.scrollIntoView({block:'center'});lightning.click();}" +
                 "const both=await waitFor(()=>{try{const p=JSON.parse(localStorage.getItem('kv.settings')||'{}');return Array.isArray(p.effect)&&p.effect.includes('chuva')&&p.effect.includes('raios');}catch(e){return false;}});" +
                 "if(!both){report(false,'rain and lightning were not both persisted');return 'rain-lightning-not-persisted';}" +
                 "if(state==='effects-main'){" +
@@ -162,7 +163,7 @@ public final class ReferenceActivity extends Activity {
                 "close.click();" +
                 "const closed=await waitFor(()=>!Array.from(document.querySelectorAll('h2')).some(h=>h.innerText.trim().toUpperCase()==='CONFIGURAÇÕES DO KELLVYN'));" +
                 "if(!closed){report(false,'settings panel did not close after enabling lightning');return 'effects-panel-stuck';}" +
-                "await new Promise(resolve=>setTimeout(resolve,1200));" +
+                "await new Promise(resolve=>setTimeout(r=>r(),1200));" +
                 "}" +
                 "done();return state+'-ready';" +
                 "}" +
