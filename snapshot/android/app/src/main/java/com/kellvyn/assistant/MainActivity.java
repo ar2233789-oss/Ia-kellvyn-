@@ -840,15 +840,44 @@ public class MainActivity extends Activity {
         }
 
         if (!brain.hasModel()) {
-            new AlertDialog.Builder(this)
-                    .setTitle("Preparar o cérebro local")
-                    .setMessage("Para ativar respostas reais no aparelho, é necessário baixar o modelo Gemma local (aproximadamente 2,01 GB). O download usa a conexão atual do celular e pode ser retomado se for interrompido. Depois de instalado, as respostas são processadas no aparelho, sem enviar suas mensagens a um serviço de IA na nuvem. Libere pelo menos 2,2 GB de espaço livre. Deseja baixar o modelo e enviar esta mensagem?")
-                    .setNegativeButton("Agora não", null)
-                    .setPositiveButton("Baixar e enviar", (dialog, which) ->
-                            startBrainRequest(displayText, prompt, fileUri, fileName))
-                    .show();
+            LinearLayout body = new LinearLayout(this);
+            body.setOrientation(LinearLayout.VERTICAL);
+            TextView explanation = text(
+                    "Para ativar respostas reais no aparelho, será necessário baixar o modelo Gemma local, com aproximadamente 2,01 GB. O download usa a conexão do celular e pode ser retomado se for interrompido. Depois da preparação, as mensagens são processadas no próprio aparelho, sem enviar suas conversas a um serviço de IA na nuvem. Libere pelo menos 2,2 GB.",
+                    13, uiMutedColor(), false);
+            explanation.setLineSpacing(dp(3), 1.1f);
+            explanation.setPadding(dp(12), dp(12), dp(12), dp(12));
+            explanation.setBackground(roundRect(uiPanelAltColor(), dp(10), themeAccentColor(0x3345A989), dp(1)));
+            body.addView(explanation, new LinearLayout.LayoutParams(-1, -2));
+
+            LinearLayout actions = new LinearLayout(this);
+            actions.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams actionsLp = new LinearLayout.LayoutParams(-1, -2);
+            actionsLp.topMargin = dp(12);
+            body.addView(actions, actionsLp);
+
+            TextView cancel = text("Agora não", 13, uiMutedColor(), false);
+            cancel.setGravity(Gravity.CENTER);
+            cancel.setBackground(roundRect(uiPanelAltColor(), dp(10), themeAccentColor(0x5545A989), dp(1)));
+            actions.addView(cancel, new LinearLayout.LayoutParams(0, dp(42), 1));
+
+            TextView download = text("Baixar e enviar", 13, uiBackground(), true);
+            download.setGravity(Gravity.CENTER);
+            download.setBackground(roundRect(accent, dp(10), accent, dp(1)));
+            LinearLayout.LayoutParams downloadLp = new LinearLayout.LayoutParams(0, dp(42), 1);
+            downloadLp.leftMargin = dp(8);
+            actions.addView(download, downloadLp);
+
+            android.app.Dialog dialog = showBottomSheetDialog(
+                    "PREPARAR O CÉREBRO LOCAL", "Uma única IA, executada no próprio celular", body);
+            cancel.setOnClickListener(v -> dialog.dismiss());
+            download.setOnClickListener(v -> {
+                dialog.dismiss();
+                startBrainRequest(displayText, prompt, fileUri, fileName);
+            });
             return;
         }
+
         startBrainRequest(displayText, prompt, fileUri, fileName);
     }
 
@@ -1898,9 +1927,7 @@ public class MainActivity extends Activity {
     }
 
     private void showApps() {
-        new AlertDialog.Builder(this).setTitle("Apps / APKs")
-                .setMessage("Nenhum aplicativo ou APK criado está registrado neste aparelho ainda. A criação e compilação de projetos precisa ser conectada ao construtor real da Kellvyn IA.")
-                .setPositiveButton("Entendi", null).show();
+        openPhoneApps();
     }
 
     /** Preserve every approved emerald RGB value; other palettes tint fixed native surfaces too. */
@@ -2085,18 +2112,42 @@ public class MainActivity extends Activity {
         input.setHintTextColor(uiMutedColor());
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
         input.setPadding(dp(12), dp(10), dp(12), dp(10));
+        input.setBackground(roundRect(uiPanelAltColor(), dp(10), themeAccentColor(0x6645A989), dp(1)));
 
-        AlertDialog editor = new AlertDialog.Builder(this)
-                .setTitle(title)
-                .setMessage("Informe uma cor HEX de seis dígitos.")
-                .setView(input)
-                .setNegativeButton("Cancelar", (d, which) -> reopenSettingsPanelAfterDismiss())
-                .setPositiveButton("Aplicar", null)
-                .create();
-        // A Dialog has its own window. Dismiss the sheet first so the color editor is
-        // actually presented above the app instead of opening behind the settings sheet.
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        TextView hint = text("Informe uma cor HEX de seis dígitos, por exemplo #38E6BC.", 12, uiMutedColor(), false);
+        body.addView(hint);
+        LinearLayout.LayoutParams inputLp = new LinearLayout.LayoutParams(-1, dp(46));
+        inputLp.topMargin = dp(10);
+        body.addView(input, inputLp);
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams actionsLp = new LinearLayout.LayoutParams(-1, -2);
+        actionsLp.topMargin = dp(12);
+        body.addView(actions, actionsLp);
+
+        TextView cancel = text("Cancelar", 13, uiMutedColor(), false);
+        cancel.setGravity(Gravity.CENTER);
+        cancel.setBackground(roundRect(uiPanelAltColor(), dp(10), themeAccentColor(0x5545A989), dp(1)));
+        actions.addView(cancel, new LinearLayout.LayoutParams(0, dp(42), 1));
+
+        TextView apply = text("Aplicar", 13, uiBackground(), true);
+        apply.setGravity(Gravity.CENTER);
+        apply.setBackground(roundRect(accent, dp(10), accent, dp(1)));
+        LinearLayout.LayoutParams applyLp = new LinearLayout.LayoutParams(0, dp(42), 1);
+        applyLp.leftMargin = dp(8);
+        actions.addView(apply, applyLp);
+
+        // Dismiss Settings before opening the editor to avoid stacked Android windows.
         parentDialog.dismiss();
-        editor.setOnShowListener(ignored -> editor.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
+        android.app.Dialog editor = showBottomSheetDialog(
+                title.toUpperCase(Locale.ROOT), "Personalizar cor da interface", body);
+        Runnable reopen = this::reopenSettingsPanelAfterDismiss;
+        editor.setOnDismissListener(ignored -> reopen.run());
+        cancel.setOnClickListener(v -> editor.dismiss());
+        apply.setOnClickListener(v -> {
             String raw = input.getText().toString().trim();
             if (!raw.startsWith("#")) raw = "#" + raw;
             try {
@@ -2110,13 +2161,10 @@ public class MainActivity extends Activity {
                 }
                 editor.dismiss();
                 applyVisualTheme();
-                reopenSettingsPanelAfterDismiss();
             } catch (IllegalArgumentException invalid) {
                 toast("HEX inválido. Use, por exemplo, #38E6BC.");
             }
-        }));
-        editor.setOnCancelListener(d -> reopenSettingsPanelAfterDismiss());
-        editor.show();
+        });
     }
 
     private static final String[][] UI_PALETTES = {
