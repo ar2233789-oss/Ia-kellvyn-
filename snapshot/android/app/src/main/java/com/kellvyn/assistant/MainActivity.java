@@ -2914,7 +2914,6 @@ public class MainActivity extends Activity {
         private final Paint flashPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint rainSpritePaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private final Rect rainSpriteSource = new Rect(0, 0, 4, 64);
-        private final float[] rainWidth = new float[count];
         private Bitmap rainSprite;
         private final Choreographer.FrameCallback frameCallback = new Choreographer.FrameCallback() {
             @Override public void doFrame(long frameTimeNanos) {
@@ -2927,6 +2926,7 @@ public class MainActivity extends Activity {
         // 68 rain streaks match the web canvas density at the 444dp Poco F6 viewport.
         private final int count = 68;
         private final int particleCount = 42;
+        private final float[] rainWidth = new float[count];
         private final float[] x = new float[count], y = new float[count], speed = new float[count], len = new float[count], opacity = new float[count];
         private final float[] px = new float[particleCount], py = new float[particleCount];
         private final float[] pspeed = new float[particleCount], psize = new float[particleCount], prot = new float[particleCount], protSpeed = new float[particleCount];
