@@ -1578,12 +1578,11 @@ public class MainActivity extends Activity {
     private void showBots() {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(0, 0, 0, 0);
 
         TextView instructions = text(
                 "Configure os tokens pelo chat principal. Telegram: /bot telegram token SEU_TOKEN. " +
                 "Discord: /bot discord token SEU_TOKEN (ative Message Content Intent no portal do Discord). " +
-                "O modelo local precisa estar baixado antes de ativar um bot. O WhatsApp exige uma integração pública de webhook e permanece indisponível neste APK.",
+                "O cérebro local precisa estar preparado antes de ativar um bot. O WhatsApp exige webhook público e permanece indisponível neste APK.",
                 12, uiMutedColor(), false);
         instructions.setLineSpacing(dp(3), 1f);
         instructions.setPadding(dp(12), dp(12), dp(12), dp(12));
@@ -1600,20 +1599,15 @@ public class MainActivity extends Activity {
             final String platform;
             final Switch toggle;
             final TextView status;
-            final boolean tokenPresent;
 
             BotRow(String platform, String title, boolean supportsRuntime) {
                 this.platform = platform;
-                tokenPresent = supportsRuntime && BotTokenStore.hasToken(MainActivity.this, platform);
-
+                boolean tokenPresent = supportsRuntime && BotTokenStore.hasToken(MainActivity.this, platform);
                 LinearLayout row = new LinearLayout(MainActivity.this);
                 row.setGravity(Gravity.CENTER_VERTICAL);
                 row.setPadding(dp(12), dp(10), dp(12), dp(10));
                 row.setBackground(roundRect(uiPanelColor(), dp(12), themeAccentColor(0x3345A989), dp(1)));
 
-                LinearLayout labels = new LinearLayout(MainActivity.this);
-                labels.setOrientation(LinearLayout.VERTICAL);
-                labels.setGravity(Gravity.CENTER_VERTICAL);
                 String badgeText = "telegram".equals(platform) ? "TG" : "discord".equals(platform) ? "DC" : "WA";
                 int badgeColor = "telegram".equals(platform) ? Color.rgb(41, 169, 235)
                         : "discord".equals(platform) ? Color.rgb(88, 101, 242) : Color.rgb(37, 211, 102);
@@ -1621,26 +1615,34 @@ public class MainActivity extends Activity {
                 badge.setGravity(Gravity.CENTER);
                 badge.setBackground(roundRect(badgeColor, dp(11), badgeColor, dp(1)));
                 row.addView(badge, new LinearLayout.LayoutParams(dp(36), dp(36)));
+
+                LinearLayout labels = new LinearLayout(MainActivity.this);
+                labels.setOrientation(LinearLayout.VERTICAL);
+                labels.setGravity(Gravity.CENTER_VERTICAL);
                 LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(0, -2, 1);
                 labelsLp.leftMargin = dp(10);
                 row.addView(labels, labelsLp);
                 labels.addView(text(title, 14, uiTextColor(), true));
+
                 status = text(botStatusText(platform, prefs.getBoolean("bot_enabled_" + platform, false), tokenPresent),
                         11, uiMutedColor(), false);
                 status.setPadding(0, dp(2), dp(8), 0);
                 labels.addView(status, new LinearLayout.LayoutParams(-1, -2));
+
                 toggle = new Switch(MainActivity.this);
                 boolean enabled = supportsRuntime && prefs.getBoolean("bot_enabled_" + platform, false);
                 toggle.setChecked(enabled);
                 toggle.setEnabled(supportsRuntime && tokenPresent && brain.hasModel());
+                if (android.os.Build.VERSION.SDK_INT >= 21) {
+                    toggle.setThumbTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));
+                    toggle.setTrackTintList(android.content.res.ColorStateList.valueOf(
+                            colorWithAlpha(accent, 150)));
+                }
                 row.addView(toggle, new LinearLayout.LayoutParams(-2, -2));
-                LinearLayout.LayoutParams botRowLp = new LinearLayout.LayoutParams(-1, -2);
-                botRowLp.topMargin = dp(6);
-                botsContainer.addView(row, botRowLp);
 
-                View divider = new View(MainActivity.this);
-                divider.setBackgroundColor(themeAccentColor(0x2233C995));
-                botsContainer.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
+                LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(-1, -2);
+                rowLp.topMargin = dp(6);
+                botsContainer.addView(row, rowLp);
 
                 if (!supportsRuntime) {
                     status.setText("Indisponível: precisa de webhook público.");
@@ -1650,12 +1652,12 @@ public class MainActivity extends Activity {
                 toggle.setOnCheckedChangeListener((button, checked) -> {
                     if (checked && !brain.hasModel()) {
                         toggle.setChecked(false);
-                        toast("Abra o chat principal, autorize e conclua o download do cérebro local antes de ativar bots.");
+                        toast("Prepare o cérebro local no chat principal antes de ativar bots.");
                         return;
                     }
                     if (checked && !BotTokenStore.hasToken(MainActivity.this, platform)) {
                         toggle.setChecked(false);
-                        toast("Configure o token do bot pelo chat principal; não envie o token em uma conversa normal.");
+                        toast("Configure o token pelo chat principal; não envie o token em uma conversa comum.");
                         return;
                     }
                     prefs.edit().putBoolean("bot_enabled_" + platform, checked).apply();
@@ -1663,9 +1665,9 @@ public class MainActivity extends Activity {
                     BotRuntimeService.refresh(MainActivity.this);
                     toggle.setEnabled(false);
                     button.postDelayed(() -> {
-                        boolean stillConfigured = supportsRuntime && BotTokenStore.hasToken(MainActivity.this, platform);
-                        toggle.setEnabled(stillConfigured && brain.hasModel());
-                        refreshBotStatus(status, platform, prefs.getBoolean("bot_enabled_" + platform, false), stillConfigured);
+                        boolean configured = supportsRuntime && BotTokenStore.hasToken(MainActivity.this, platform);
+                        toggle.setEnabled(configured && brain.hasModel());
+                        refreshBotStatus(status, platform, prefs.getBoolean("bot_enabled_" + platform, false), configured);
                     }, 1200L);
                 });
             }
@@ -1675,20 +1677,21 @@ public class MainActivity extends Activity {
         BotRow discord = new BotRow("discord", "Discord", true);
         BotRow whatsapp = new BotRow("whatsapp", "WhatsApp", false);
 
-        android.app.Dialog dialog = showBottomSheetDialog("BOTS ATIVOS",
-                "Mantenha os bots ativos ou desligue quando quiser", layout);
-        dialog.setOnShowListener(ignored -> {
-            android.os.Handler handler = new android.os.Handler();
-            Runnable update = new Runnable() {
-                @Override public void run() {
-                    if (!dialog.isShowing()) return;
-                    boolean tgEnabled = prefs.getBoolean("bot_enabled_telegram", false);
-                    boolean dcEnabled = prefs.getBoolean("bot_enabled_discord", false);
-                    refreshBotStatus(telegram.status, "telegram", tgEnabled, BotTokenStore.hasToken(MainActivity.this, "telegram"));
-                    refreshBotStatus(discord.status, "discord", dcEnabled, BotTokenStore.hasToken(MainActivity.this, "discord"));
-                    handler.postDelayed(this, 1500L);
-                }
-            };
+        android.app.Dialog dialog = showBottomSheetDialog(
+                "BOTS ATIVOS", "Mantenha os bots ativos ou desligue quando quiser", layout);
+        android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+        Runnable update = new Runnable() {
+            @Override public void run() {
+                if (!dialog.isShowing()) return;
+                boolean tgEnabled = prefs.getBoolean("bot_enabled_telegram", false);
+                boolean dcEnabled = prefs.getBoolean("bot_enabled_discord", false);
+                refreshBotStatus(telegram.status, "telegram", tgEnabled,
+                        BotTokenStore.hasToken(MainActivity.this, "telegram"));
+                refreshBotStatus(discord.status, "discord", dcEnabled,
+                        BotTokenStore.hasToken(MainActivity.this, "discord"));
+                handler.postDelayed(this, 1500L);
+            }
+        };
         handler.post(update);
         dialog.setOnDismissListener(event -> handler.removeCallbacks(update));
     }
@@ -2265,7 +2268,8 @@ public class MainActivity extends Activity {
         listLp.topMargin = dp(16);
         panel.addView(list, listLp);
 
-        Runnable refresh = () -> {
+        final Runnable[] refresh = new Runnable[1];
+        refresh[0] = () -> {
             saved.setText(data[0].length() + " informação(ões) salva(s) neste aparelho.");
             list.removeAllViews();
             TextView heading = text("INFORMAÇÕES SALVAS", 10, uiMutedColor(), true);
@@ -2299,7 +2303,8 @@ public class MainActivity extends Activity {
                     if (!focused) {
                         String value = item.getText().toString().trim();
                         if (!value.isEmpty()) {
-                            data[0].put(index, value);
+                            try { data[0].put(index, value); }
+                            catch (org.json.JSONException ignored) {}
                             prefs.edit().putString("memory_items", data[0].toString()).apply();
                         }
                     }
@@ -2311,7 +2316,7 @@ public class MainActivity extends Activity {
                     }
                     data[0] = next;
                     prefs.edit().putString("memory_items", next.toString()).apply();
-                    refresh.run();
+                    refresh[0].run();
                 });
                 LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(-1, -2);
                 rowLp.topMargin = dp(6);
@@ -2324,7 +2329,7 @@ public class MainActivity extends Activity {
             data[0].put(value);
             prefs.edit().putString("memory_items", data[0].toString()).apply();
             entry.setText("");
-            refresh.run();
+            refresh[0].run();
             toast("Informação salva na memória local.");
         });
         refresh.run();
