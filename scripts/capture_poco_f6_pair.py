@@ -77,17 +77,40 @@ def wait_reference_state(state: str, timeout: int = 75) -> None:
 
 
 def capture_reference_state(state: str) -> Path:
+    # Each reference case starts with a clean localStorage so palette/effect state
+    # is deterministic. Open the real React controls through Android accessibility
+    # (a physical tap), not a synthetic DOM click.
     adb("shell", "am", "force-stop", REF_PACKAGE, timeout=30)
+    adb("shell", "pm", "clear", REF_PACKAGE, timeout=45)
     adb("logcat", "-c", timeout=15)
     adb(
         "shell", "am", "start", "-n", REF_COMPONENT,
-        "--es", "lab_state", state,
+        "--es", "lab_state", "main",
         timeout=45,
     )
-    wait_reference_state(state)
+    wait_reference_state("main")
+
+    if state != "main":
+        tap_ui_label("Configurações", fallback=(1138, 185))
+        assert_ui_label("CONFIGURAÇÕES DO KELLVYN", timeout=25)
+
+    if state in ("gold-settings", "gold-main"):
+        tap_ui_label("Preto e Dourado", timeout=25)
+        time.sleep(1.2)
+        if state == "gold-main":
+            tap_ui_label("Fechar", timeout=15)
+            assert_ui_label_absent("CONFIGURAÇÕES DO KELLVYN")
+    elif state in ("effects-settings", "effects-main"):
+        tap_ui_label("Raios", timeout=25)
+        time.sleep(1.2)
+        if state == "effects-main":
+            tap_ui_label("Fechar", timeout=15)
+            assert_ui_label_absent("CONFIGURAÇÕES DO KELLVYN")
+    elif state not in ("main", "settings"):
+        raise RuntimeError(f"Unsupported reference capture state: {state}")
+
     time.sleep(1)
     return capture(f"webview-{state}", WEB)
-
 
 def screenshot_array(path: Path) -> np.ndarray:
     return np.asarray(Image.open(path).convert("RGB"), dtype=np.int16)
@@ -141,46 +164,77 @@ def verify_native_gold() -> dict:
     return {"expectedSignedArgb": expected, "actualSignedArgb": actual, "passed": True}
 
 
-def native_ui_tree():
-    remote = "/sdcard/kellvyn-layout-ui.xml"
+def ui_tree() -> ET.Element:
+    remote = "/sdcard/kellvyn-parity-ui.xml"
     adb("shell", "uiautomator", "dump", remote, timeout=45)
     raw = adb("shell", "cat", remote, timeout=20)
     return ET.fromstring(raw)
 
 
-def native_label_point(label: str) -> tuple[int, int] | None:
-    root = native_ui_tree()
+def ui_point(label: str) -> tuple[int, int] | None:
+    root = ui_tree()
+    expected = label.strip().casefold()
     parents = {child: node for node in root.iter("node") for child in node}
     for node in root.iter("node"):
-        if node.attrib.get("text", "").strip() != label:
+        value = (node.attrib.get("text", "") or node.attrib.get("content-desc", "")).strip().casefold()
+        if value != expected:
             continue
         target = node
         while target is not None and target.attrib.get("clickable") != "true":
             target = parents.get(target)
         if target is None:
             target = node
-        match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",
-                             target.attrib.get("bounds", ""))
+        match = ET.re.sub if False else None
+        bounds = target.attrib.get("bounds", "")
+        import re
+        match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
         if match:
             x1, y1, x2, y2 = map(int, match.groups())
             return (x1 + x2) // 2, (y1 + y2) // 2
     return None
 
 
-def wait_native_label(label: str, timeout: int = 35) -> tuple[int, int]:
+def wait_ui_point(label: str, timeout: int = 25) -> tuple[int, int] | None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        point = native_label_point(label)
-        if point is not None:
-            return point
+        try:
+            point = ui_point(label)
+            if point is not None:
+                return point
+        except Exception as error:
+            print(f"UIA_RETRY label={label!r}: {error}", flush=True)
         time.sleep(1)
-    raise RuntimeError(f"Native UI did not expose the expected label: {label}")
+    return None
 
 
-def tap_native_label(label: str, timeout: int = 35) -> None:
-    x, y = wait_native_label(label, timeout=timeout)
-    adb("shell", "input", "tap", str(x), str(y), timeout=20)
+def tap_ui_label(label: str, *, fallback: tuple[int, int] | None = None, timeout: int = 25) -> None:
+    point = wait_ui_point(label, timeout=timeout)
+    if point is None:
+        if fallback is None:
+            raise RuntimeError(f"Accessibility control not found: {label!r}")
+        point = fallback
+        print(f"UIA_FALLBACK label={label!r} point={point}", flush=True)
+    adb("shell", "input", "tap", str(point[0]), str(point[1]), timeout=20)
 
+
+def assert_ui_label(label: str, timeout: int = 25) -> None:
+    if wait_ui_point(label, timeout=timeout) is None:
+        raise RuntimeError(f"Expected visible UI label was not found: {label!r}")
+
+
+def assert_ui_label_absent(label: str, timeout: int = 8) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            if ui_point(label) is None:
+                return
+        except Exception:
+            return
+        time.sleep(0.8)
+    raise RuntimeError(f"UI label is still visible after closing panel: {label!r}")
+
+
+def verify_native_effects() -> dict:
 
 def verify_native_effects() -> dict:
     raw = adb(
@@ -207,9 +261,10 @@ def verify_native_effects() -> dict:
 def capture_native_states() -> dict:
     NATIVE.mkdir(parents=True, exist_ok=True)
     adb("install", "-r", "artifacts/apk/app-debug.apk", timeout=180)
+    adb("shell", "pm", "clear", APP_PACKAGE, timeout=45)
     adb("shell", "am", "force-stop", APP_PACKAGE, timeout=30)
     adb("shell", "am", "start", "-n", APP_COMPONENT, timeout=45)
-    time.sleep(12)
+    time.sleep(8)
 
     activity = adb("shell", "dumpsys", "activity", "activities", timeout=30)
     if "com.kellvyn.assistant/.MainActivity" not in activity:
@@ -221,37 +276,33 @@ def capture_native_states() -> dict:
 
     capture("native-main", NATIVE)
 
-    # Capture the default settings sheet and select the measured gold palette.
-    adb("shell", "input", "tap", "1170", "130", timeout=20)
-    time.sleep(3)
+    # Locate settings by accessible content description. The former y=130 tap
+    # landed inside the status bar and produced a false "settings" screenshot.
+    tap_ui_label("Configurações", fallback=(1138, 199))
+    assert_ui_label("CONFIGURAÇÕES DO KELLVYN", timeout=25)
     settings = capture("native-settings", NATIVE)
-    x, y, tap_report = locate_gold_palette(settings)
-    (NATIVE / "native-palette-tap.json").write_text(
-        json.dumps(tap_report, indent=2) + "\n", encoding="utf-8"
-    )
-    adb("shell", "input", "tap", str(x), str(y), timeout=20)
-    time.sleep(2)
+
+    tap_ui_label("Preto e Dourado", timeout=25)
+    time.sleep(1.2)
     capture("native-gold-settings", NATIVE)
     gold_pref = verify_native_gold()
 
-    adb("shell", "input", "keyevent", "4", timeout=20)
-    time.sleep(2)
+    tap_ui_label("Fechar", timeout=15)
+    assert_ui_label_absent("CONFIGURAÇÕES DO KELLVYN")
     activity = adb("shell", "dumpsys", "activity", "activities", timeout=30)
     if "com.kellvyn.assistant/.MainActivity" not in activity:
         raise RuntimeError("Native app left the foreground after closing Settings.")
     capture("native-gold-main", NATIVE)
 
-    # Turn on lightning while preserving rain, then verify the persisted native state.
-    adb("shell", "input", "tap", "1170", "130", timeout=20)
-    time.sleep(3)
-    wait_native_label("Raios")
-    tap_native_label("Raios")
-    time.sleep(3)
-    wait_native_label("CONFIGURAÇÕES DO KELLVYN")
+    # Reopen Settings and toggle lightning without disabling the default rain.
+    tap_ui_label("Configurações", fallback=(1138, 199))
+    assert_ui_label("CONFIGURAÇÕES DO KELLVYN", timeout=25)
+    tap_ui_label("Raios", timeout=25)
+    time.sleep(1.2)
     capture("native-effects-settings", NATIVE)
     effects_pref = verify_native_effects()
-    tap_native_label("Fechar")
-    time.sleep(2)
+    tap_ui_label("Fechar", timeout=15)
+    assert_ui_label_absent("CONFIGURAÇÕES DO KELLVYN")
     activity = adb("shell", "dumpsys", "activity", "activities", timeout=30)
     if "com.kellvyn.assistant/.MainActivity" not in activity:
         raise RuntimeError("Native app left the foreground after closing effects Settings.")
@@ -267,8 +318,8 @@ def capture_native_states() -> dict:
     )
     return {
         "goldPalettePreference": gold_pref,
-        "paletteTap": tap_report,
         "rainLightningPreference": effects_pref,
+        "settingsOpenedBy": "Android UIAutomator accessibility label",
     }
 
 def environment_report() -> dict:
