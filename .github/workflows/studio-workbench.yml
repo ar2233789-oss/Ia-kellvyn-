@@ -1,0 +1,72 @@
+name: Kellvyn offline Studio workbench checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'studio/**'
+      - 'scripts/test_studio_workbench.py'
+      - 'scripts/test_studio_workbench.mjs'
+      - '.github/workflows/studio-workbench.yml'
+  pull_request:
+    paths:
+      - 'studio/**'
+      - 'scripts/test_studio_workbench.py'
+      - 'scripts/test_studio_workbench.mjs'
+      - '.github/workflows/studio-workbench.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kellvyn-studio-workbench-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-check:
+    name: Offline HTML, DOM references and JavaScript syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate structure and offline-only resources
+        run: python scripts/test_studio_workbench.py
+
+  browser-interactions:
+    name: Studio interaction and export tests
+    needs: [static-check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Serve the standalone Studio locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/studio-workbench-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          READY=0
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173/studio/ >/dev/null; then READY=1; break; fi
+            sleep 1
+          done
+          if [ "$READY" != "1" ]; then
+            cat /tmp/studio-workbench-server.log
+            exit 1
+          fi
+          node scripts/test_studio_workbench.mjs
