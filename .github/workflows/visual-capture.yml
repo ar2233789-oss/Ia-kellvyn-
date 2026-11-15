@@ -136,26 +136,26 @@ jobs:
             adb install -r artifacts/apk/app-debug.apk &&
             adb shell am start -W -n com.kellvyn.assistant/.MainActivity &&
             sleep 8 &&
-            adb shell screencap -p /sdcard/native-screen.png &&
-            adb pull /sdcard/native-screen.png artifacts/native/native-screen.png &&
+            adb shell screencap -p /data/local/tmp/native-screen.png &&
+            adb pull /data/local/tmp/native-screen.png artifacts/native/native-screen.png &&
             adb shell input tap 1170 130 &&
             sleep 3 &&
-            adb shell screencap -p /sdcard/native-settings.png &&
-            adb pull /sdcard/native-settings.png artifacts/native/native-settings.png &&
-            adb shell uiautomator dump /sdcard/kellvyn-lab-ui.xml &&
-            adb pull /sdcard/kellvyn-lab-ui.xml artifacts/native/settings-ui.xml &&
+            adb shell screencap -p /data/local/tmp/native-settings.png &&
+            adb pull /data/local/tmp/native-settings.png artifacts/native/native-settings.png &&
+            adb shell uiautomator dump /data/local/tmp/kellvyn-lab-ui.xml &&
+            adb pull /data/local/tmp/kellvyn-lab-ui.xml artifacts/native/settings-ui.xml &&
             COORDS="$(python3 -c 'import re,sys,xml.etree.ElementTree as E; r=E.parse(sys.argv[1]).getroot(); n=next(n for n in r.iter("node") if n.get("text","").strip().casefold()=="preto e dourado"); m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.get("bounds","")); a,b,c,d=map(int,m.groups()); print((a+c)//2,(b+d)//2)' artifacts/native/settings-ui.xml)" &&
             adb shell input tap $COORDS &&
             sleep 4 &&
-            adb shell screencap -p /sdcard/native-settings-gold.png &&
-            adb pull /sdcard/native-settings-gold.png artifacts/native/native-settings-gold.png &&
-            adb shell uiautomator dump /sdcard/kellvyn-lab-ui.xml &&
-            adb pull /sdcard/kellvyn-lab-ui.xml artifacts/native/gold-settings-ui.xml &&
+            adb shell screencap -p /data/local/tmp/native-settings-gold.png &&
+            adb pull /data/local/tmp/native-settings-gold.png artifacts/native/native-settings-gold.png &&
+            adb shell uiautomator dump /data/local/tmp/kellvyn-lab-ui.xml &&
+            adb pull /data/local/tmp/kellvyn-lab-ui.xml artifacts/native/gold-settings-ui.xml &&
             CLOSE="$(python3 -c 'import re,sys,xml.etree.ElementTree as E; r=E.parse(sys.argv[1]).getroot(); n=next(n for n in r.iter("node") if n.get("text","").strip().casefold()=="fechar"); m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.get("bounds","")); a,b,c,d=map(int,m.groups()); print((a+c)//2,(b+d)//2)' artifacts/native/gold-settings-ui.xml)" &&
             adb shell input tap $CLOSE &&
             sleep 3 &&
-            adb shell screencap -p /sdcard/native-main-gold.png &&
-            adb pull /sdcard/native-main-gold.png artifacts/native/native-main-gold.png &&
+            adb shell screencap -p /data/local/tmp/native-main-gold.png &&
+            adb pull /data/local/tmp/native-main-gold.png artifacts/native/native-main-gold.png &&
             adb shell dumpsys meminfo com.kellvyn.assistant > artifacts/native/native-meminfo.txt &&
             adb logcat -d -t 1500 > artifacts/native/native-logcat.txt
       - name: Upload native screenshots
@@ -193,7 +193,7 @@ jobs:
           mkdir -p artifacts/aligned artifacts/comparison
           compare_pair() {
             local name="$1" web="$2" native="$3"
-            python scripts/align_capture_pair.py --reference "artifacts/web/$web" --candidate "artifacts/native/$native" --output-dir artifacts/aligned --name "$name" --candidate-top-px 136
+            python scripts/align_capture_pair.py --reference "artifacts/web/$web" --candidate "artifacts/native/$native" --output-dir artifacts/aligned --name "$name" --candidate-top-px 66
             python scripts/compare_screenshots.py --reference "artifacts/aligned/$name-reference-aligned.png" --candidate "artifacts/aligned/$name-candidate-aligned.png" --output-dir artifacts/comparison --name "$name" --channel-threshold 16
           }
           compare_pair main web-reference.png native-screen.png
