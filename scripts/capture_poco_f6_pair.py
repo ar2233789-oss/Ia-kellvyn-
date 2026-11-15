@@ -20,6 +20,30 @@ REF_COMPONENT = "com.kellvyn.labreference/.ReferenceActivity"
 APP_COMPONENT = "com.kellvyn.assistant/.MainActivity"
 REF_PACKAGE = "com.kellvyn.labreference"
 APP_PACKAGE = "com.kellvyn.assistant"
+def parse_webview_raf_metrics(log: str) -> list[dict]:
+    """Extract requestAnimationFrame telemetry emitted by the WebView bridge."""
+    samples = []
+    for line in log.splitlines():
+        match = re.search(r"RAF_METRIC (\{.*\})", line)
+        if not match:
+            continue
+        try:
+            value = json.loads(match.group(1))
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict) and isinstance(value.get("fps"), (int, float)):
+            samples.append(value)
+    return samples
+
+
+def parse_native_render_metrics(log: str) -> list[dict[str, int]]:
+    """Extract per-second Choreographer FPS and frame-delta telemetry."""
+    return [
+        {"fps": int(fps), "frameDeltaMs": int(delta)}
+        for fps, delta in re.findall(r"renderFps=(\d+)\s+frameDeltaMs=(\d+)", log)
+    ]
+
+
 SCREEN_W, SCREEN_H, DENSITY = 1220, 2712, 440
 ANIMATION_DIR = OUT / "animation"
 ANIMATION_SECONDS = 45
@@ -140,14 +164,7 @@ def capture_reference_state(state: str) -> Path:
         record_animation_video("webview-rain-lightning", web_video_dir)
         web_log = adb("logcat", "-d", "-s", "KellvynWebViewLab:I", timeout=45, check=False)
         (web_video_dir / "webview-animation-logcat.txt").write_text(web_log, encoding="utf-8")
-        raf_metrics = []
-        for line in web_log.splitlines():
-            match = re.search(r"RAF_METRIC (\\{.*\\})", line)
-            if match:
-                try:
-                    raf_metrics.append(json.loads(match.group(1)))
-                except json.JSONDecodeError:
-                    pass
+        raf_metrics = parse_webview_raf_metrics(web_log)
         fps_values = [float(item["fps"]) for item in raf_metrics if isinstance(item.get("fps"), (int, float))]
         runtime_metrics = {
             "source": "requestAnimationFrame callback counter in frozen WebView reference",
@@ -159,7 +176,7 @@ def capture_reference_state(state: str) -> Path:
             "p90Fps": round(float(np.percentile(fps_values, 90)), 3) if fps_values else None,
         }
         (web_video_dir / "webview-runtime-metrics.json").write_text(
-            json.dumps(runtime_metrics, indent=2) + "\\n", encoding="utf-8"
+            json.dumps(runtime_metrics, indent=2) + "\n", encoding="utf-8"
         )
         print("WEBVIEW_RUNTIME_METRICS " + json.dumps(runtime_metrics), flush=True)
     return screenshot
@@ -408,10 +425,7 @@ def capture_native_states() -> dict:
     native_render_log = adb("logcat", "-d", "-s", "KellvynRainView:I", timeout=45, check=False)
     animation_dir = ANIMATION_DIR / "native"
     (animation_dir / "native-animation-logcat.txt").write_text(native_render_log, encoding="utf-8")
-    native_samples = [
-        {"fps": int(fps), "frameDeltaMs": int(delta)}
-        for fps, delta in re.findall(r"renderFps=(\\d+)\\s+frameDeltaMs=(\\d+)", native_render_log)
-    ]
+    native_samples = parse_native_render_metrics(native_render_log)
     fps_values = [item["fps"] for item in native_samples]
     native_runtime_metrics = {
         "source": "RainView Choreographer onDraw frame counter",
@@ -423,7 +437,7 @@ def capture_native_states() -> dict:
         "p90Fps": round(float(np.percentile(fps_values, 90)), 3) if fps_values else None,
     }
     (animation_dir / "native-runtime-metrics.json").write_text(
-        json.dumps(native_runtime_metrics, indent=2) + "\\n", encoding="utf-8"
+        json.dumps(native_runtime_metrics, indent=2) + "\n", encoding="utf-8"
     )
     print("NATIVE_RUNTIME_METRICS " + json.dumps(native_runtime_metrics), flush=True)
     return {
