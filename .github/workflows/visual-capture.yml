@@ -121,11 +121,16 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: kellvyn-native-debug-apk
-          path: artifacts/apk
+          path: artifacts/apk/native
       - uses: actions/download-artifact@v4
         with:
           name: kellvyn-lab-webview-reference-apk
-          path: artifacts/apk
+          path: artifacts/apk/reference
+      - name: Stage the isolated APKs without filename collisions
+        run: |
+          mkdir -p artifacts/apk
+          cp artifacts/apk/native/app-debug.apk artifacts/apk/app-debug.apk
+          cp artifacts/apk/reference/app-debug.apk artifacts/apk/lab-reference-debug.apk
       - name: Create the original PocoF6Virtual device profile
         shell: bash
         run: |
