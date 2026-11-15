@@ -3,7 +3,7 @@
 Este conjunto define regressões para a mesma assistente em web e Android. Não pontua respostas geradas sem executar o modelo. Cada execução deve guardar a entrada, a revisão do modelo, a configuração, a resposta integral e o veredito.
 
 ## Contrato comum
-- Gemma 4 E2B it com revisão de modelo fixada; SHA-256 verificado no Android.
+- Gemma 4 E2B it com revisão de modelo fixada; mesmo tamanho e SHA-256 verificados em streaming no navegador e no Android, antes de carregar o modelo.
 - LiteRT-LM 0.18.0 em ambas as plataformas.
 - Contexto de 4096 tokens; saída padrão de 1536 tokens; top-k 40, top-p 0,9 e temperatura 0,6.
 - Prompt-base e política de proteção reforçada idênticos.
