@@ -2662,9 +2662,9 @@ public class MainActivity extends Activity {
             WindowManager.LayoutParams params = window.getAttributes();
             params.gravity = Gravity.BOTTOM;
             params.width = -1;
-            // The 1220x2712 native screenshot showed the 89.6% sheet top about 100px
-            // above the web reference. Reduce height to 85.9%; preserve control sizes and footer placement.
-            params.height = (int) (getResources().getDisplayMetrics().heightPixels * 0.859f);
+            // Same-device comparison showed the native sheet starting about 40px
+            // below the WebView reference. Raise its top edge while keeping the footer anchored.
+            params.height = (int) (getResources().getDisplayMetrics().heightPixels * 0.874f);
             // Match the Lovable bottom sheet backdrop: stronger dim plus a small blur,
             // limited to the settings overlay so the underlying main-screen layout is untouched.
             params.dimAmount = 0.70f;
