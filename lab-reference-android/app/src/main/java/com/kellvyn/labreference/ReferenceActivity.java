@@ -122,6 +122,12 @@ public final class ReferenceActivity extends Activity {
                 "};" +
                 "const waitFor=async predicate=>{const deadline=Date.now()+10000;while(Date.now()<deadline){const value=predicate();if(value)return value;await new Promise(r=>setTimeout(r,150));}return null;};" +
                 "const done=()=>report(true,'');" +
+                // Wait for the React bootstrap effect: it creates kv.active only after event
+                // handlers are mounted. Without this barrier, an early programmatic click can
+                // be swallowed and the main capture can precede the DigitalRain activation.
+                "const booted=await waitFor(()=>{try{return !!localStorage.getItem('kv.active') && !!document.querySelector('button[aria-label=\\\"Configurações\\\"]');}catch(e){return false;}});" +
+                "if(!booted){report(false,'web app did not finish React bootstrap');return 'web-bootstrap-timeout';}" +
+                "await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));" +
                 "if(state==='main'){done();return 'main-ready';}" +
                 "const settings=document.querySelector('button[aria-label=\\\"Configurações\\\"]');" +
                 "if(!settings){report(false,'settings button missing');return 'settings-open-failed';}" +
@@ -144,10 +150,21 @@ public final class ReferenceActivity extends Activity {
                 "}" +
                 "done();return state+'-ready';" +
                 "}" +
-                "if(state==='effects'){" +
+                "if(state==='effects'||state==='effects-main'){" +
                 "const lightning=await waitFor(()=>Array.from(document.querySelectorAll('button')).find(b=>b.innerText.trim()==='Raios'));" +
                 "if(!lightning){report(false,'lightning effect button missing');return 'lightning-button-missing';}" +
-                "lightning.scrollIntoView({block:'center'});lightning.click();done();return 'effects-ready';" +
+                "lightning.scrollIntoView({block:'center'});lightning.click();" +
+                "const both=await waitFor(()=>{try{const p=JSON.parse(localStorage.getItem('kv.settings')||'{}');return Array.isArray(p.effect)&&p.effect.includes('chuva')&&p.effect.includes('raios');}catch(e){return false;}});" +
+                "if(!both){report(false,'rain and lightning were not both persisted');return 'rain-lightning-not-persisted';}" +
+                "if(state==='effects-main'){" +
+                "const close=await waitFor(()=>document.querySelector('button[aria-label=\\\"Fechar\\\"]'));" +
+                "if(!close){report(false,'settings close button missing after enabling lightning');return 'effects-close-missing';}" +
+                "close.click();" +
+                "const closed=await waitFor(()=>!Array.from(document.querySelectorAll('h2')).some(h=>h.innerText.trim().toUpperCase()==='CONFIGURAÇÕES DO KELLVYN'));" +
+                "if(!closed){report(false,'settings panel did not close after enabling lightning');return 'effects-panel-stuck';}" +
+                "await new Promise(resolve=>setTimeout(resolve,1200));" +
+                "}" +
+                "done();return state+'-ready';" +
                 "}" +
                 "report(false,'unsupported lab state '+state);return 'unsupported-state';" +
                 "})()";
