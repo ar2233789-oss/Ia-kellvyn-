@@ -91,7 +91,7 @@ def main() -> None:
     if "minOf(items.length(), 30)" not in native_brain or "take(300)" not in native_brain:
         raise AssertionError("Native memory limits do not match web")
 
-    print("PASS: base prompt, protection, model revision, SDK, sampler, context, output budget and memory limits match.")
+    print("PASS: base prompt, protection, model URL, SHA-256, size, SDK, sampler, context, output budget and memory limits match.")
 
 
 if __name__ == "__main__":
