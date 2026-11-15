@@ -25,7 +25,7 @@ describe("Kellvyn system prompt and reinforced protection", () => {
   it("caps memory count and individual memory length", () => {
     const records = Array.from({ length: 35 }, (_, index) => ({
       id: String(index),
-      text: index === 0 ? "X".repeat(400) : \`Memória \${index}\`,
+      text: index === 0 ? "X".repeat(400) : "Memória " + index,
     }));
     localStorage.setItem("kv.memories", JSON.stringify(records));
     const prompt = buildSystemPrompt(false);
